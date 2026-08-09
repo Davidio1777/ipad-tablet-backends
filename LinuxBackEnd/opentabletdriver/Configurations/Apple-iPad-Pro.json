@@ -1,0 +1,26 @@
+{
+  "Name": "Apple iPad Pro (Apple Pencil)",
+  "Specifications": {
+    "Digitizer": {
+      "Width": 262.0,
+      "Height": 196.5,
+      "MaxX": 32767,
+      "MaxY": 32767
+    },
+    "Pen": {
+      "MaxPressure": 8191,
+      "ButtonCount": 2
+    }
+  },
+  "DigitizerIdentifiers": [
+    {
+      "VendorID": 4617,
+      "ProductID": 41424,
+      "InputReportLength": 10,
+      "ReportParser": "OpenTabletDriver.Configurations.Parsers.XP_Pen.XP_PenReportParser"
+    }
+  ],
+  "Attributes": {
+    "libinputoverride": "1"
+  }
+}

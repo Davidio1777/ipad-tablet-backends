@@ -1,0 +1,14 @@
+[Unit]
+Description=iPad Linux Tablet streaming and Pencil backend
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env ipad-tablet-backend serve --source auto --output DP-2 --encoder auto --input-mode otd --usb
+Restart=on-failure
+RestartSec=2
+EnvironmentFile=-%h/.config/ipad-tablet-backend/environment
+
+[Install]
+WantedBy=graphical-session.target

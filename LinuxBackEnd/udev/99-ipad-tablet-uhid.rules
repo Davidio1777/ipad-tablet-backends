@@ -1,0 +1,9 @@
+# Give only members of the dedicated ipadtablet group access. Keep uaccess as
+# a convenience for desktop sessions managed by logind.
+KERNEL=="uhid", SUBSYSTEM=="misc", OPTIONS+="static_node=uhid", GROUP="ipadtablet", MODE="0660", TAG+="uaccess"
+
+# OpenTabletDriver consumes the virtual raw HID endpoint. The descriptor is
+# vendor-defined, but ignoring any input node is an additional double-input
+# safeguard if the kernel creates one in a future version.
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ENV{HID_NAME}=="Apple iPad Pro (Apple Pencil)", ENV{HID_UNIQ}=="ipad-pencil-network", GROUP="ipadtablet", MODE="0660", SYMLINK+="ipad-pencil", TAG+="uaccess"
+SUBSYSTEM=="input", ENV{NAME}=="Apple iPad Pro (Apple Pencil)", ENV{LIBINPUT_IGNORE_DEVICE}="1"
