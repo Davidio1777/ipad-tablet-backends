@@ -12,6 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install capture tools used by command-generation tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg wf-recorder
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -28,7 +32,7 @@ jobs:
       - name: Install Qt 6 build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build qt6-base-dev
+          sudo apt-get install -y build-essential cmake ninja-build qt6-base-dev libgl1-mesa-dev
       - run: cmake -S LinuxBackEnd/gui -B build/linux-gui -G Ninja -DCMAKE_BUILD_TYPE=Release
       - run: cmake --build build/linux-gui --parallel
       - name: Check AppImage scripts
