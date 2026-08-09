@@ -3,13 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
+import socket
 import struct
 from dataclasses import dataclass
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
-
-from .protocol import configure_low_latency_writer
-
 
 HELLO_FRAME = 1
 VIDEO_FRAME = 2
@@ -18,6 +16,19 @@ PING_FRAME = 4
 READY_FRAME = 5
 STREAM_INFO_FRAME = 6
 MAX_FRAME_SIZE = 16 * 1024 * 1024
+
+
+def configure_low_latency_writer(writer: asyncio.StreamWriter) -> None:
+    transport = getattr(writer, "transport", None)
+    if transport is not None:
+        transport.set_write_buffer_limits(high=256 * 1024, low=64 * 1024)
+    raw_socket = writer.get_extra_info("socket") if hasattr(writer, "get_extra_info") else None
+    if raw_socket is not None:
+        try:
+            raw_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            raw_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 256 * 1024)
+        except OSError:
+            pass
 
 
 class TabletSink(Protocol):

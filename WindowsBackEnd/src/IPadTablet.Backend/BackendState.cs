@@ -1,10 +1,6 @@
-using System.Collections.Concurrent;
 using System.Text.Json;
-using System.Threading.Channels;
 
 namespace IPadTablet.Backend;
-
-internal readonly record struct StreamItem(bool IsText, byte[] Data);
 
 internal sealed class BackendState : IAsyncDisposable
 {
@@ -12,9 +8,9 @@ internal sealed class BackendState : IAsyncDisposable
     private readonly IPenSink pen;
     private readonly CapturePipeline capture;
     private readonly SemaphoreSlim settingsLock = new(1, 1);
-    private readonly ConcurrentDictionary<Guid, Channel<StreamItem>> clients = new();
     private readonly CancellationTokenSource shutdown = new();
     private readonly CaptureProfile baseProfile;
+    private readonly OtdConfigurator otd;
     private CaptureProfile profile;
     private UdpBridge? udp;
     private UsbBridge? usb;
@@ -25,7 +21,6 @@ internal sealed class BackendState : IAsyncDisposable
 
     public bool VideoEnabled { get; private set; } = true;
     public string InputMode => options.InputMode;
-    public int StreamClients => clients.Count;
     public long Frames => Interlocked.Read(ref frames);
     public long InputSamples => Interlocked.Read(ref inputSamples);
     public long InputEvents => pen.EventsReceived;
@@ -37,6 +32,7 @@ internal sealed class BackendState : IAsyncDisposable
         profile = baseProfile;
         pen = options.InputMode == "otd" ? new OtdPipePenSink() : new NullPenSink();
         capture = new CapturePipeline(options, PublishFrameAsync);
+        otd = new OtdConfigurator(options);
     }
 
     public void Attach(UdpBridge? udpBridge, UsbBridge? usbBridge)
@@ -48,6 +44,7 @@ internal sealed class BackendState : IAsyncDisposable
     public async Task StartAsync()
     {
         penTask = pen.StartAsync(shutdown.Token);
+        _ = otd.EnsureAsync(cancellationToken: shutdown.Token);
         if (VideoEnabled) await capture.StartAsync(profile, shutdown.Token);
     }
 
@@ -68,7 +65,6 @@ internal sealed class BackendState : IAsyncDisposable
     public object Health => new
     {
         status = "ok",
-        streamClients = StreamClients,
         frames = Frames,
         inputMode = InputMode,
         inputEvents = InputEvents,
@@ -81,25 +77,6 @@ internal sealed class BackendState : IAsyncDisposable
         usbFrames = usb?.FramesSent ?? 0,
         Metadata
     };
-
-    public (Guid Id, ChannelReader<StreamItem> Reader) AddClient()
-    {
-        var channel = Channel.CreateBounded<StreamItem>(new BoundedChannelOptions(1)
-        {
-            FullMode = BoundedChannelFullMode.DropOldest,
-            SingleReader = true,
-            SingleWriter = false
-        });
-        var id = Guid.NewGuid();
-        clients[id] = channel;
-        channel.Writer.TryWrite(TextItem(Metadata));
-        return (id, channel.Reader);
-    }
-
-    public void RemoveClient(Guid id)
-    {
-        if (clients.TryRemove(id, out var channel)) channel.Writer.TryComplete();
-    }
 
     public async Task HandleInputAsync(JsonElement message, CancellationToken cancellationToken = default)
     {
@@ -136,6 +113,7 @@ internal sealed class BackendState : IAsyncDisposable
         try
         {
             var gaming = GetBool(message, "enabled");
+            if (gaming) _ = otd.EnsureAsync(true, shutdown.Token);
             var video = !message.TryGetProperty("videoEnabled", out var videoElement)
                 || videoElement.ValueKind != JsonValueKind.False;
             var next = gaming
@@ -152,7 +130,7 @@ internal sealed class BackendState : IAsyncDisposable
             profile = next;
             VideoEnabled = video;
             streamRevision++;
-            Console.WriteLine($"Stream-Profil: {(video ? gaming ? "Gaming" : "Qualität" : "Nur Tablet")}, " +
+            Console.WriteLine($"Stream profile: {(video ? gaming ? "gaming" : "quality" : "tablet-only")}, " +
                 $"{next.Width}x{next.Height} @ {next.Fps}, {next.Bitrate / 1_000_000} Mbit/s {next.RateControl.ToUpperInvariant()}");
             PublishMetadata();
             if (video) await capture.StartAsync(profile, shutdown.Token);
@@ -163,8 +141,6 @@ internal sealed class BackendState : IAsyncDisposable
     private ValueTask PublishFrameAsync(byte[] frame)
     {
         Interlocked.Increment(ref frames);
-        var item = new StreamItem(false, frame);
-        foreach (var channel in clients.Values) channel.Writer.TryWrite(item);
         udp?.Offer(frame);
         usb?.Offer(frame);
         return ValueTask.CompletedTask;
@@ -172,13 +148,10 @@ internal sealed class BackendState : IAsyncDisposable
 
     private void PublishMetadata()
     {
-        var item = TextItem(Metadata);
-        foreach (var channel in clients.Values) channel.Writer.TryWrite(item);
         udp?.PublishMetadata();
         usb?.PublishMetadata();
     }
 
-    private static StreamItem TextItem(object value) => new(true, JsonSerializer.SerializeToUtf8Bytes(value));
     private static int Even(int value, int min, int max) => Math.Clamp(value, min, max) & ~1;
     private static int GetInt(JsonElement e, string key, int fallback) =>
         e.TryGetProperty(key, out var p) && p.TryGetInt32(out var v) ? v : fallback;

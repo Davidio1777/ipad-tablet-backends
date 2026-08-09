@@ -129,12 +129,12 @@ internal sealed class CapturePipeline : IAsyncDisposable
             UseShellExecute = false, RedirectStandardOutput = true,
             RedirectStandardError = true, CreateNoWindow = true
         };
-        using var process = Process.Start(info) ?? throw new InvalidOperationException("FFmpeg konnte nicht gestartet werden.");
+        using var process = Process.Start(info) ?? throw new InvalidOperationException("FFmpeg could not be started.");
         var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);
         foreach (var encoder in new[] { "h264_amf", "h264_nvenc", "h264_qsv", "libx264" })
             if (output.Contains(encoder, StringComparison.Ordinal)) return encoder;
-        throw new InvalidOperationException("FFmpeg enthält keinen unterstützten H.264-Encoder.");
+        throw new InvalidOperationException("FFmpeg does not contain a supported H.264 encoder.");
     }
 
     private static async Task RelayErrorsAsync(StreamReader reader, CancellationToken cancellationToken)

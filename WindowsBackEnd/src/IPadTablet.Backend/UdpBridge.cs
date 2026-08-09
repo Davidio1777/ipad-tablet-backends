@@ -14,6 +14,7 @@ internal sealed class UdpBridge : IAsyncDisposable
     private readonly BackendState state;
     private readonly UdpClient video;
     private readonly UdpClient input;
+    private readonly SecureDatagrams crypto;
     private readonly ConcurrentDictionary<string, Client> clients = new();
     private readonly Channel<byte[]> frames = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(1)
     {
@@ -21,7 +22,8 @@ internal sealed class UdpBridge : IAsyncDisposable
     });
     private readonly CancellationTokenSource shutdown = new();
     private Task? videoReceiveTask, inputReceiveTask, sendTask;
-    private uint frameId, metadataId;
+    private uint frameId;
+    private int metadataId;
     private long framesSent;
 
     public int ConnectedClients => clients.Count;
@@ -33,6 +35,9 @@ internal sealed class UdpBridge : IAsyncDisposable
         this.state = state;
         video = new UdpClient(new IPEndPoint(IPAddress.Any, options.UdpVideoPort));
         input = new UdpClient(new IPEndPoint(IPAddress.Any, options.UdpInputPort));
+        crypto = new SecureDatagrams(
+            options.Token, "server-to-client", "client-to-server"
+        );
     }
 
     public void Start()
@@ -57,9 +62,11 @@ internal sealed class UdpBridge : IAsyncDisposable
             var packet = await video.ReceiveAsync(cancellationToken);
             try
             {
-                using var document = JsonDocument.Parse(packet.Buffer);
+                var plaintext = crypto.Open(SecureDatagrams.ControlEnvelope, packet.Buffer);
+                if (plaintext is null) continue;
+                using var document = JsonDocument.Parse(plaintext);
                 var root = document.RootElement;
-                if (GetString(root, "type") != "hello" || GetString(root, "token") != options.Token) continue;
+                if (GetString(root, "type") != "hello") continue;
                 var session = GetString(root, "session");
                 if (string.IsNullOrWhiteSpace(session) || session.Length > 128) continue;
                 clients[session] = new Client(packet.RemoteEndPoint, DateTime.UtcNow);
@@ -76,10 +83,12 @@ internal sealed class UdpBridge : IAsyncDisposable
             var packet = await input.ReceiveAsync(cancellationToken);
             try
             {
-                using var document = JsonDocument.Parse(packet.Buffer);
+                var plaintext = crypto.Open(SecureDatagrams.ControlEnvelope, packet.Buffer);
+                if (plaintext is null) continue;
+                using var document = JsonDocument.Parse(plaintext);
                 var root = document.RootElement;
                 var session = GetString(root, "session");
-                if (GetString(root, "type") != "input" || GetString(root, "token") != options.Token
+                if (GetString(root, "type") != "input"
                     || !clients.TryGetValue(session, out var client)
                     || !Equals(client.Endpoint.Address, packet.RemoteEndPoint.Address)
                     || !root.TryGetProperty("payload", out var payload)) continue;
@@ -95,10 +104,11 @@ internal sealed class UdpBridge : IAsyncDisposable
         await foreach (var frame in frames.Reader.ReadAllAsync(cancellationToken))
         {
             var id = unchecked(++frameId);
-            var packets = EncodePackets(1, id, frame).ToArray();
+            var packets = EncodePackets(1, id, frame, 1200 - SecureDatagrams.Overhead).ToArray();
             foreach (var client in ActiveClients())
             {
-                foreach (var packet in packets) await video.SendAsync(packet, client.Endpoint, cancellationToken);
+                foreach (var packet in packets)
+                    await video.SendAsync(crypto.Seal(SecureDatagrams.VideoEnvelope, packet), client.Endpoint, cancellationToken);
                 Interlocked.Increment(ref framesSent);
             }
         }
@@ -107,8 +117,9 @@ internal sealed class UdpBridge : IAsyncDisposable
     private async Task SendMetadataAsync(IPEndPoint endpoint)
     {
         var payload = JsonSerializer.SerializeToUtf8Bytes(state.Metadata);
-        foreach (var packet in EncodePackets(2, unchecked(++metadataId), payload))
-            await video.SendAsync(packet, endpoint);
+        var id = unchecked((uint)Interlocked.Increment(ref metadataId));
+        foreach (var packet in EncodePackets(2, id, payload, 1200 - SecureDatagrams.Overhead))
+            await video.SendAsync(crypto.Seal(SecureDatagrams.VideoEnvelope, packet), endpoint);
     }
 
     private IEnumerable<Client> ActiveClients()
@@ -121,9 +132,10 @@ internal sealed class UdpBridge : IAsyncDisposable
         }
     }
 
-    private static IEnumerable<byte[]> EncodePackets(byte type, uint id, byte[] payload)
+    private static IEnumerable<byte[]> EncodePackets(byte type, uint id, byte[] payload, int mtu)
     {
-        const int mtu = 1200, header = 14, chunkSize = mtu - header;
+        const int header = 14;
+        var chunkSize = mtu - header;
         var count = Math.Max(1, (payload.Length + chunkSize - 1) / chunkSize);
         for (var index = 0; index < count; index++)
         {
@@ -149,6 +161,7 @@ internal sealed class UdpBridge : IAsyncDisposable
         video.Dispose(); input.Dispose(); frames.Writer.TryComplete();
         var tasks = new[] { videoReceiveTask, inputReceiveTask, sendTask }.Where(t => t is not null).Cast<Task>();
         await Task.WhenAll(tasks).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        crypto.Dispose();
         shutdown.Dispose();
     }
 }

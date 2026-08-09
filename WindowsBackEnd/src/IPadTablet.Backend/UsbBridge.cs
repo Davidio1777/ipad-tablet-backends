@@ -54,13 +54,13 @@ internal sealed class UsbBridge : IAsyncDisposable
                         {
                             using var client = new TcpClient { NoDelay = true };
                             await client.ConnectAsync("127.0.0.1", options.UsbPort + offset, cancellationToken);
-                            Console.WriteLine($"USB: iPad auf Geräteport {options.UsbPort + offset} verbunden");
+                            Console.WriteLine($"USB: iPad connected on device port {options.UsbPort + offset}");
                             connected = true;
                             await SessionAsync(client.GetStream(), cancellationToken);
                         }
                         catch (Exception error) when (error is SocketException or IOException)
                         {
-                            if (offset == 9) Console.WriteLine($"USB wartet auf iPad: {error.Message}");
+                            if (offset == 9) Console.WriteLine($"USB waiting for iPad: {error.Message}");
                         }
                     }
                     if (!connected) await Task.Delay(1000, cancellationToken);
@@ -87,7 +87,7 @@ internal sealed class UsbBridge : IAsyncDisposable
             RedirectStandardOutput = true, CreateNoWindow = true
         };
         Console.WriteLine($"USB proxy: {options.Iproxy} {info.Arguments}");
-        return Process.Start(info) ?? throw new InvalidOperationException("iproxy konnte nicht gestartet werden.");
+        return Process.Start(info) ?? throw new InvalidOperationException("iproxy could not be started.");
     }
 
     private async Task SessionAsync(NetworkStream stream, CancellationToken cancellationToken)
@@ -98,7 +98,7 @@ internal sealed class UsbBridge : IAsyncDisposable
         hello["protocol"] = JsonSerializer.SerializeToElement(1);
         await WriteFrameAsync(stream, HelloFrame, JsonSerializer.SerializeToUtf8Bytes(hello), cancellationToken);
         var (type, _) = await ReadFrameAsync(stream, cancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
-        if (type != ReadyFrame) throw new IOException("Ungültiger USB-Handshake.");
+        if (type != ReadyFrame) throw new IOException("Invalid USB handshake.");
         Connected = true;
         PublishMetadata();
         using var sessionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -138,7 +138,7 @@ internal sealed class UsbBridge : IAsyncDisposable
                 using var document = JsonDocument.Parse(payload);
                 await state.HandleInputAsync(document.RootElement, cancellationToken);
             }
-            else if (type != PingFrame) throw new IOException($"Unbekannter USB-Frame {type}.");
+            else if (type != PingFrame) throw new IOException($"Unknown USB frame {type}.");
         }
     }
 
@@ -157,7 +157,7 @@ internal sealed class UsbBridge : IAsyncDisposable
         var header = new byte[5];
         await stream.ReadExactlyAsync(header, token);
         var length = BinaryPrimitives.ReadUInt32BigEndian(header.AsSpan(1));
-        if (length > 16 * 1024 * 1024) throw new IOException("USB-Frame zu groß.");
+        if (length > 16 * 1024 * 1024) throw new IOException("USB frame is too large.");
         var payload = new byte[length];
         await stream.ReadExactlyAsync(payload, token);
         return (header[0], payload);

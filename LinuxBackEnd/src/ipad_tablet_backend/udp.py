@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-import hmac
 import json
 import struct
 import time
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from typing import Any, cast
+
+from .secure import CONTROL_ENVELOPE, HEADER as SECURE_HEADER, TAG_SIZE, VIDEO_ENVELOPE, SecureDatagrams
 
 
 MAGIC = b"IPUD"
@@ -97,7 +98,7 @@ class _InputProtocol(asyncio.DatagramProtocol):
 
 
 class UDPBridge:
-    """Authenticated, lossy LAN transport with separate video and input ports."""
+    """Encrypted, lossy LAN transport with separate video and input ports."""
 
     def __init__(
         self,
@@ -108,12 +109,13 @@ class UDPBridge:
         control_handler: Callable[[dict[str, Any]], Awaitable[None]],
         release_handler: Callable[[], None],
     ) -> None:
-        if not token:
-            raise ValueError("UDP transport requires a non-empty authentication token")
         self.options = options
         self.host = host
         self.metadata = metadata
         self.token = token
+        self.crypto = SecureDatagrams(
+            token, sending_direction="server-to-client", receiving_direction="client-to-server"
+        )
         self.control_handler = control_handler
         self.release_handler = release_handler
         self.video_transport: asyncio.DatagramTransport | None = None
@@ -166,17 +168,19 @@ class UDPBridge:
     def handle_video_datagram(self, data: bytes, address: Address) -> None:
         if len(data) > MAX_CONTROL_SIZE:
             return
+        plaintext = self.crypto.open(data, expected_type=CONTROL_ENVELOPE)
+        if plaintext is None:
+            return
         try:
-            message = json.loads(data)
+            message = json.loads(plaintext)
         except (TypeError, ValueError, json.JSONDecodeError):
             return
         if not isinstance(message, dict) or message.get("type") != "hello":
             return
-        supplied = message.get("token", "")
         session = message.get("session", "")
-        if not isinstance(supplied, str) or not isinstance(session, str) or not session:
+        if not isinstance(session, str) or not session:
             return
-        if len(session) > 128 or not hmac.compare_digest(self.token, supplied):
+        if len(session) > 128:
             return
         self.clients[session] = UDPClient(address=address, last_seen=time.monotonic())
         self._send_metadata(address)
@@ -185,25 +189,26 @@ class UDPBridge:
         if len(data) > MAX_CONTROL_SIZE:
             self.dropped_input_packets += 1
             return
+        plaintext = self.crypto.open(data, expected_type=CONTROL_ENVELOPE)
+        if plaintext is None:
+            self.dropped_input_packets += 1
+            return
         try:
-            envelope = json.loads(data)
+            envelope = json.loads(plaintext)
         except (TypeError, ValueError, json.JSONDecodeError):
             self.dropped_input_packets += 1
             return
         if not isinstance(envelope, dict) or envelope.get("type") != "input":
             self.dropped_input_packets += 1
             return
-        supplied = envelope.get("token", "")
         session = envelope.get("session", "")
         payload = envelope.get("payload")
         client = self.clients.get(session) if isinstance(session, str) else None
         if (
-            not isinstance(supplied, str)
-            or not isinstance(session, str)
+            not isinstance(session, str)
             or not isinstance(payload, dict)
             or client is None
             or address[0] != client.address[0]
-            or not hmac.compare_digest(self.token, supplied)
         ):
             self.dropped_input_packets += 1
             return
@@ -228,11 +233,14 @@ class UDPBridge:
             return
         self.frame_id = (self.frame_id + 1) & 0xFFFFFFFF
         packets = tuple(
-            encode_packets(VIDEO_PACKET, self.frame_id, access_unit, mtu=self.options.mtu)
+            encode_packets(
+                VIDEO_PACKET, self.frame_id, access_unit,
+                mtu=self.options.mtu - SECURE_HEADER.size - TAG_SIZE,
+            )
         )
         for client in tuple(self.clients.values()):
             for packet in packets:
-                transport.sendto(packet, client.address)
+                transport.sendto(self.crypto.seal(VIDEO_ENVELOPE, packet), client.address)
                 self.video_packets_sent += 1
             self.frames_sent += 1
 
@@ -247,9 +255,10 @@ class UDPBridge:
         self.metadata_id = (self.metadata_id + 1) & 0xFFFFFFFF
         payload = json.dumps(self.metadata(), separators=(",", ":")).encode()
         for packet in encode_packets(
-            METADATA_PACKET, self.metadata_id, payload, mtu=self.options.mtu
+            METADATA_PACKET, self.metadata_id, payload,
+            mtu=self.options.mtu - SECURE_HEADER.size - TAG_SIZE,
         ):
-            transport.sendto(packet, address)
+            transport.sendto(self.crypto.seal(VIDEO_ENVELOPE, packet), address)
             self.video_packets_sent += 1
 
     def _expire_clients(self, now: float) -> None:

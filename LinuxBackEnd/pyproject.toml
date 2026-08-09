@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Low-latency Linux screen streaming and virtual Apple Pencil tablet backend"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-dependencies = []
+dependencies = ["cryptography>=46,<51"]
 
 [project.scripts]
 ipad-tablet-backend = "ipad_tablet_backend.__main__:main"

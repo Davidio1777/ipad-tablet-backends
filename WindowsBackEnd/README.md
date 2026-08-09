@@ -1,62 +1,119 @@
-# iPad Tablet Backend für Windows 11
+# iPad Tablet Windows 11 Backend
 
-Dieses Backend spricht dasselbe Protokoll wie das Linux-Backend und die iPad-App:
+The Windows backend streams the desktop to the iPad and exposes Apple Pencil through an
+OpenTabletDriver device hub. It offers both a console executable and a WPF GUI.
 
-- WebSocket: `8765/TCP` für H.264 und Pencil
-- Gaming-UDP: `8766/UDP` für Video und `8767/UDP` für Pencil/Steuerung
-- Kabel: USBMux/`iproxy` auf `18765` bis `18774`, ohne Token
-- OpenTabletDriver: `\\.\pipe\ipad-pencil`, 10-Byte-HID-Reports mit Druck und Tilt
-- „Nur Tablet“ beendet FFmpeg vollständig; OTD und Pencil bleiben verbunden
+## Features
 
-## Voraussetzungen unter Windows
+- FFmpeg `gdigrab` capture
+- automatic AMD AMF, NVIDIA NVENC, Intel QSV or `libx264` selection
+- AES-256-GCM encrypted UDP on `8766` (video) and `8767` (Pencil/control)
+- optional direct USB with usbmuxd/iproxy, without a LAN token
+- named-pipe OpenTabletDriver hub with automatic absolute-mode setup
+- Gaming Mode settings and a video-off tablet-only mode
+- graphical launcher for connection, capture, encoder and OTD settings
 
-1. [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-2. Ein aktuelles `ffmpeg.exe` im `PATH`
-3. OpenTabletDriver 0.6.7
-4. Optional für USB: Windows-Build von `iproxy.exe`/libusbmuxd und ein mit dem PC gekoppeltes iPad
+LAN transport is encrypted UDP only.
 
-PowerShell im Backend-Ordner:
+## Requirements
+
+1. Windows 11 x64
+2. [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) to build, and the .NET 8 Desktop
+   Runtime to run framework-dependent releases
+3. A full Windows FFmpeg build with `gdigrab` and at least one H.264 encoder in `PATH`
+4. [OpenTabletDriver](https://opentabletdriver.net/) 0.6.7 or a compatible newer release
+5. Optional USB: a Windows `iproxy.exe`/libusbmuxd build and Apple Mobile Device support
+
+## Build
+
+Open PowerShell in `WindowsBackEnd`:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
 .\build.ps1
+```
+
+Outputs:
+
+- `dist\backend\ipad-tablet-backend.exe`: console backend
+- `dist\gui\iPadTabletBackend.exe`: graphical launcher
+- `dist\otd`: OTD plugin and tablet configuration
+
+Keep the `gui` and `backend` folders next to each other. The GUI locates the console executable in
+the sibling backend directory and displays its live log.
+
+## Install OpenTabletDriver integration
+
+Close OpenTabletDriver completely, then run:
+
+```powershell
 .\install-otd.ps1
-.\run.ps1 -Token "choose-a-long-random-token" -Udp
 ```
 
-Für WebSocket/WLAN ohne UDP genügt:
+Restart OTD and run **Detect**. The backend retries detection and selects
+`OpenTabletDriver.Desktop.Output.AbsoluteMode` at startup and whenever Gaming Mode is enabled.
+
+## Run with the GUI
+
+Start `dist\gui\iPadTabletBackend.exe`, generate a token, select the capture rectangle and encoder,
+then choose **Start backend**. For LAN use, permit UDP 8766 and 8767 in Windows Defender Firewall for
+private networks only.
+
+## Run from PowerShell
+
+Encrypted UDP:
 
 ```powershell
-.\run.ps1 -Token "choose-a-long-random-token"
+.\run.ps1 -Token "replace-this-with-a-long-random-token"
 ```
 
-Für USB (Token wird absichtlich nicht geprüft, usbmuxd-Pairing ist die Vertrauensgrenze):
+USB only, without a token:
 
 ```powershell
-.\run.ps1 -Token "choose-a-long-random-token" -Usb -Iproxy "C:\Tools\libusbmuxd\iproxy.exe"
+.\run.ps1 -UsbOnly -Iproxy "C:\Tools\libusbmuxd\iproxy.exe"
 ```
 
-Die App verwendet weiterhin `ws://WINDOWS-IP:8765`. In der Windows-Firewall müssen bei LAN-Betrieb TCP 8765 und bei UDP zusätzlich UDP 8766/8767 für das private Netzwerk freigegeben sein. USB benötigt keine LAN-Freigabe.
+USB plus encrypted UDP:
 
-## Capture und Encoder
+```powershell
+.\run.ps1 -Usb -Token "replace-this-with-a-long-random-token" `
+  -Iproxy "C:\Tools\libusbmuxd\iproxy.exe"
+```
 
-Standardmäßig ermittelt `--encoder auto` in dieser Reihenfolge:
-
-1. `h264_amf` (AMD)
-2. `h264_nvenc` (NVIDIA)
-3. `h264_qsv` (Intel)
-4. `libx264`
-
-Die Desktop-Aufnahme verwendet FFmpegs `gdigrab`; die H.264-Ausgabe hat AUD-Grenzen, keine B-Frames und eine Ein-Frame-Latenz-Puffergröße. Gaming-Auflösung, FPS, Bitrate, CBR/VBR sowie „Nur Tablet“ werden live von der iPad-App übernommen.
-
-Mehrere Monitore werden über den virtuellen Windows-Desktop gewählt. Beispiel für einen Monitor rechts vom Hauptmonitor:
+The low-level executable supports additional settings:
 
 ```powershell
 dist\backend\ipad-tablet-backend.exe serve `
-  --token choose-a-long-random-token --udp --source-x 2560 --source-y 0 `
-  --source-width 2560 --source-height 1440 --width 2560 --height 1440
+  --token "replace-this-with-a-long-random-token" `
+  --encoder h264_nvenc `
+  --source-x 2560 --source-y 0 --source-width 2560 --source-height 1440 `
+  --width 1280 --height 720 --fps 120 --bitrate 8000000 --rate-control cbr
 ```
 
-## OTD-Diagnose
+Run with `--help` for every option. `--encoder auto` probes AMF, NVENC, QSV and finally `libx264`.
 
-Backend zuerst starten, danach OpenTabletDriver neu starten und **Detect** wählen. In der Backend-Konsole muss `OTD: OpenTabletDriver verbunden` erscheinen. Der virtuelle Endpunkt wird vollständig im Benutzerkontext erzeugt; Testsigning oder ein eigener Kernel-Treiber sind nicht nötig.
+## USB details
+
+Unlock the iPad and accept **Trust This Computer** before starting. The backend launches `iproxy`
+against the app listener. usbmuxd pairing is the trust boundary, so USB-only mode does not require,
+send or validate the LAN token. No firewall rule is required for USB-only mode.
+
+## Gaming Mode
+
+The iPad can change resolution, 60/120 FPS, bitrate and CBR/VBR while connected. Tablet-only mode
+stops FFmpeg completely while keeping Pencil input and OTD active. A practical low-latency starting
+point is 1280x720, 120 FPS, 8 Mbit/s and CBR.
+
+## Security
+
+Every LAN datagram is encrypted and authenticated with AES-256-GCM. Directional keys come from the
+token through HKDF-SHA256, headers are authenticated and recent nonces cannot be replayed. Tokens must
+contain at least 16 UTF-8 bytes. Do not forward UDP 8766/8767 to the public internet.
+
+## Troubleshooting
+
+- Confirm `ffmpeg -encoders` lists the selected encoder.
+- Run `otd detect` after the backend creates the device hub.
+- Use a private Windows Firewall rule for UDP 8766/8767.
+- For USB, confirm the iPad is paired and `iproxy.exe` is the selected path.
+- Include the GUI/backend log, GPU, FFmpeg build and OTD version in bug reports.

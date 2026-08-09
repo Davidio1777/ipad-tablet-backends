@@ -48,7 +48,7 @@ internal sealed class OtdPipePenSink : IPenSink
                 connection = pipe;
                 disconnected = NewSignal();
             }
-            Console.WriteLine("OTD: OpenTabletDriver verbunden");
+            Console.WriteLine("OTD: OpenTabletDriver connected");
             try { await disconnected.Task.WaitAsync(cancellationToken); }
             catch (OperationCanceledException) { }
             lock (connectionLock) if (ReferenceEquals(connection, pipe)) connection = null;

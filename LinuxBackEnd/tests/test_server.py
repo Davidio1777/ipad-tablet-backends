@@ -10,7 +10,6 @@ class StreamSettingsTests(unittest.IsolatedAsyncioTestCase):
     async def test_gaming_profile_can_be_applied_and_restored(self) -> None:
         options = ServerOptions(
             host="127.0.0.1",
-            port=0,
             token="",
             input_mode="none",
             uinput_path="/dev/null",
@@ -64,7 +63,6 @@ class StreamSettingsTests(unittest.IsolatedAsyncioTestCase):
     async def test_pencil_batch_preserves_every_coalesced_sample(self) -> None:
         options = ServerOptions(
             host="127.0.0.1",
-            port=0,
             token="",
             input_mode="none",
             uinput_path="/dev/null",
@@ -97,7 +95,6 @@ class StreamSettingsTests(unittest.IsolatedAsyncioTestCase):
     async def test_video_can_stop_without_stopping_input_and_restart(self) -> None:
         options = ServerOptions(
             host="127.0.0.1",
-            port=0,
             token="",
             input_mode="none",
             uinput_path="/dev/null",

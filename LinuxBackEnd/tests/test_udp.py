@@ -11,6 +11,10 @@ from ipad_tablet_backend.udp import (
     decode_packet,
     encode_packets,
 )
+from ipad_tablet_backend.secure import CONTROL_ENVELOPE, VIDEO_ENVELOPE, SecureDatagrams
+
+
+TOKEN = "correct-horse-battery-staple"
 
 
 class FakeDatagramTransport:
@@ -45,29 +49,30 @@ class UDPProtocolTests(unittest.IsolatedAsyncioTestCase):
             UDPOptions(client_timeout=60),
             "127.0.0.1",
             lambda: {"type": "stream-info", "fps": 120},
-            "secret",
+            TOKEN,
             handle,
             lambda: None,
         )
         transport = FakeDatagramTransport()
         bridge.video_transport = transport  # type: ignore[assignment]
         address = ("192.0.2.5", 50_000)
-        bridge.handle_video_datagram(
-            json.dumps({"type": "hello", "token": "secret", "session": "abc"}).encode(),
-            address,
+        client = SecureDatagrams(
+            TOKEN, sending_direction="client-to-server", receiving_direction="server-to-client"
         )
+        bridge.handle_video_datagram(client.seal(
+            CONTROL_ENVELOPE, json.dumps({"type": "hello", "session": "abc"}).encode()
+        ), address)
         self.assertEqual(bridge.connected_clients, 1)
-        self.assertEqual(decode_packet(transport.sent[0][0])[0], METADATA_PACKET)
+        metadata = client.open(transport.sent[0][0], expected_type=VIDEO_ENVELOPE)
+        assert metadata is not None
+        self.assertEqual(decode_packet(metadata)[0], METADATA_PACKET)
 
-        bridge.handle_input_datagram(
-            json.dumps({
+        bridge.handle_input_datagram(client.seal(
+            CONTROL_ENVELOPE, json.dumps({
                 "type": "input",
-                "token": "secret",
                 "session": "abc",
                 "payload": {"type": "pencil", "sequence": 9},
-            }).encode(),
-            ("192.0.2.5", 50_001),
-        )
+            }).encode()), ("192.0.2.5", 50_001))
         await asyncio.sleep(0)
         self.assertEqual(received, [{"type": "pencil", "sequence": 9}])
         self.assertEqual(bridge.input_packets_received, 1)
@@ -82,25 +87,28 @@ class UDPProtocolTests(unittest.IsolatedAsyncioTestCase):
             UDPOptions(client_timeout=60),
             "127.0.0.1",
             dict,
-            "secret",
+            TOKEN,
             handle,
             lambda: None,
         )
         transport = FakeDatagramTransport()
         bridge.video_transport = transport  # type: ignore[assignment]
-        bridge.handle_video_datagram(
-            json.dumps({"type": "hello", "token": "wrong", "session": "abc"}).encode(),
-            ("192.0.2.5", 50_000),
+        wrong_client = SecureDatagrams(
+            "wrong-token-long-enough", sending_direction="client-to-server",
+            receiving_direction="server-to-client",
         )
-        bridge.handle_input_datagram(
-            json.dumps({
+        client = SecureDatagrams(
+            TOKEN, sending_direction="client-to-server", receiving_direction="server-to-client"
+        )
+        bridge.handle_video_datagram(wrong_client.seal(
+            CONTROL_ENVELOPE, json.dumps({"type": "hello", "session": "abc"}).encode()
+        ), ("192.0.2.5", 50_000))
+        bridge.handle_input_datagram(client.seal(
+            CONTROL_ENVELOPE, json.dumps({
                 "type": "input",
-                "token": "secret",
                 "session": "missing",
                 "payload": {"type": "pencil"},
-            }).encode(),
-            ("192.0.2.5", 50_001),
-        )
+            }).encode()), ("192.0.2.5", 50_001))
         await asyncio.sleep(0)
         self.assertEqual(bridge.connected_clients, 0)
         self.assertEqual(received, [])
@@ -110,8 +118,31 @@ class UDPProtocolTests(unittest.IsolatedAsyncioTestCase):
         async def handle(_message: dict[str, object]) -> None:
             pass
 
-        with self.assertRaisesRegex(ValueError, "non-empty"):
+        with self.assertRaisesRegex(ValueError, "at least 16"):
             UDPBridge(UDPOptions(), "127.0.0.1", dict, "", handle, lambda: None)
+
+    def test_authenticated_packet_replay_is_rejected(self) -> None:
+        server = SecureDatagrams(
+            TOKEN, sending_direction="server-to-client", receiving_direction="client-to-server"
+        )
+        client = SecureDatagrams(
+            TOKEN, sending_direction="client-to-server", receiving_direction="server-to-client"
+        )
+        packet = client.seal(CONTROL_ENVELOPE, b"hello")
+        self.assertEqual(server.open(packet, expected_type=CONTROL_ENVELOPE), b"hello")
+        self.assertIsNone(server.open(packet, expected_type=CONTROL_ENVELOPE))
+
+    def test_cross_platform_aes_gcm_vector(self) -> None:
+        packet = bytes.fromhex(
+            "495041450203000102030405060708090a0b505ca39f317c1c0be1bcc641a0f7b5"
+            "9e2f1f31f3372a72a34b9b147297d0"
+        )
+        server = SecureDatagrams(
+            "interoperability-test-token",
+            sending_direction="server-to-client",
+            receiving_direction="client-to-server",
+        )
+        self.assertEqual(server.open(packet, expected_type=CONTROL_ENVELOPE), b"ipad-tablet-v2")
 
 
 if __name__ == "__main__":

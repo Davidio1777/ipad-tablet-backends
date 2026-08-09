@@ -20,7 +20,6 @@ def parser() -> argparse.ArgumentParser:
 
     serve = sub.add_parser("serve", help="start screen streaming and Pencil input")
     serve.add_argument("--host", default="0.0.0.0")
-    serve.add_argument("--port", type=int, default=8765)
     serve.add_argument("--token", default=os.environ.get("IPAD_TABLET_TOKEN", ""))
     serve.add_argument("--source", choices=("auto", "wayland", "x11"), default="auto")
     serve.add_argument("--output", help="Wayland output name, for example DP-1 or iPadTablet")
@@ -51,15 +50,21 @@ def parser() -> argparse.ArgumentParser:
         help="number of consecutive USB ports to probe when iPadOS reports EADDRINUSE",
     )
     serve.add_argument("--udid", help="target one specific iPad when multiple devices are attached")
-    serve.add_argument(
-        "--udp", action="store_true",
-        help="also serve authenticated low-latency LAN video/input over UDP",
-    )
+    serve.add_argument("--no-udp", action="store_true", help="disable encrypted LAN UDP (USB only)")
     serve.add_argument("--udp-video-port", type=int, default=8_766)
     serve.add_argument("--udp-input-port", type=int, default=8_767)
     serve.add_argument(
         "--udp-mtu", type=int, default=1_200,
-        help="maximum UDP datagram size including the 14-byte protocol header",
+        help="maximum encrypted UDP datagram size",
+    )
+    serve.add_argument(
+        "--otd-auto-config", action=argparse.BooleanOptionalAction, default=True,
+        help="detect the virtual iPad and select OTD Absolute Mode automatically",
+    )
+    serve.add_argument("--otd-cli", default="otd")
+    serve.add_argument("--otd-tablet", default="Apple iPad Pro (Apple Pencil)")
+    serve.add_argument(
+        "--otd-output-mode", default="OpenTabletDriver.Desktop.Output.AbsoluteMode"
     )
 
     sub.add_parser("doctor", help="check capture and input prerequisites")
@@ -78,10 +83,10 @@ def parse_pair(value: str, separator: str, label: str) -> tuple[int, int]:
 
 
 def serve(arguments: argparse.Namespace) -> int:
-    if arguments.udp and not arguments.token:
-        print("UDP mode requires a non-empty --token.", file=sys.stderr)
+    if not arguments.no_udp and len(arguments.token.encode()) < 16:
+        print("Encrypted UDP requires a --token containing at least 16 UTF-8 bytes.", file=sys.stderr)
         return 2
-    if arguments.udp and not 576 <= arguments.udp_mtu <= 65_507:
+    if not arguments.no_udp and not 576 <= arguments.udp_mtu <= 65_507:
         print("--udp-mtu must be between 576 and 65507.", file=sys.stderr)
         return 2
     requested_size = (
@@ -102,17 +107,22 @@ def serve(arguments: argparse.Namespace) -> int:
         rate_control=arguments.rate_control,
     )
     options = ServerOptions(
-        host=arguments.host, port=arguments.port, token=arguments.token,
+        host=arguments.host, token=arguments.token,
         input_mode="none" if arguments.no_input else arguments.input_mode,
         uinput_path=arguments.uinput, uhid_path=arguments.uhid, rotation=arguments.rotation,
         pressure_curve=arguments.pressure_curve, capture=capture,
+        otd_auto_config=arguments.otd_auto_config,
+        otd_cli=arguments.otd_cli,
+        otd_tablet=arguments.otd_tablet,
+        otd_output_mode=arguments.otd_output_mode,
         usb=USBOptions(
             arguments.usb_local_port, arguments.usb_device_port, arguments.udid,
             arguments.usb_port_fallbacks,
         )
         if arguments.usb else None,
-        udp=UDPOptions(arguments.udp_video_port, arguments.udp_input_port, arguments.udp_mtu)
-        if arguments.udp else None,
+        udp=None if arguments.no_udp else UDPOptions(
+            arguments.udp_video_port, arguments.udp_input_port, arguments.udp_mtu
+        ),
     )
     try:
         asyncio.run(TabletServer(options).run())
@@ -125,6 +135,9 @@ def serve(arguments: argparse.Namespace) -> int:
         endpoint = arguments.uhid if arguments.input_mode == "otd" else arguments.uinput
         print(f"cannot open {endpoint}: {error}", file=sys.stderr)
         print("Install the included udev rules or use --input-mode none.", file=sys.stderr)
+        return 2
+    except RuntimeError as error:
+        print(str(error), file=sys.stderr)
         return 2
     except KeyboardInterrupt:
         return 0

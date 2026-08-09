@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-import hmac
 import json
 import time
 from collections import deque
 from dataclasses import dataclass, replace
 from typing import Any
-from urllib.parse import parse_qs, urlsplit
 
 from .capture import CaptureOptions, build_capture_command, capture_access_units
-from .protocol import WebSocket, accept_websocket, read_http_request, send_http_json
+from .otd import OTDConfigurator
 from .tablet import NullTablet, TabletMapping, UInputTablet
 from .uhid import UHIDTablet
 from .usb import USBBridge, USBOptions
@@ -20,7 +18,6 @@ from .udp import UDPBridge, UDPOptions
 @dataclass(slots=True)
 class ServerOptions:
     host: str
-    port: int
     token: str
     input_mode: str
     uinput_path: str
@@ -28,6 +25,10 @@ class ServerOptions:
     rotation: int
     pressure_curve: float
     capture: CaptureOptions
+    otd_auto_config: bool = True
+    otd_cli: str = "otd"
+    otd_tablet: str = "Apple iPad Pro (Apple Pencil)"
+    otd_output_mode: str = "OpenTabletDriver.Desktop.Output.AbsoluteMode"
     usb: USBOptions | None = None
     udp: UDPOptions | None = None
 
@@ -35,8 +36,6 @@ class ServerOptions:
 class TabletServer:
     def __init__(self, options: ServerOptions) -> None:
         self.options = options
-        self.clients: set[asyncio.Queue[bytes | dict[str, Any]]] = set()
-        self.input_clients = 0
         self.frames = 0
         self.input_samples = 0
         self._input_sample_times: deque[float] = deque()
@@ -52,6 +51,12 @@ class TabletServer:
             self.tablet = UInputTablet(options.uinput_path, mapping)
         else:
             self.tablet = NullTablet()
+        self.otd = OTDConfigurator(
+            enabled=options.input_mode == "otd" and options.otd_auto_config,
+            tablet=options.otd_tablet,
+            output_mode=options.otd_output_mode,
+            cli=options.otd_cli,
+        )
         self.usb_bridge = (
             USBBridge(
                 options.usb,
@@ -75,6 +80,7 @@ class TabletServer:
         )
         self._capture_task: asyncio.Task[None] | None = None
         self._usb_task: asyncio.Task[None] | None = None
+        self._otd_task: asyncio.Task[bool] | None = None
 
     @property
     def metadata(self) -> dict[str, Any]:
@@ -92,9 +98,8 @@ class TabletServer:
         }
 
     async def run(self) -> None:
-        server = await asyncio.start_server(self.handle_connection, self.options.host, self.options.port)
-        addresses = ", ".join(str(sock.getsockname()) for sock in server.sockets or [])
-        print(f"iPad Tablet backend listening on {addresses}")
+        if not self.udp_bridge and not self.usb_bridge:
+            raise RuntimeError("at least secure UDP or USB must be enabled")
         print("capture:", " ".join(self.command))
         if self.udp_bridge:
             await self.udp_bridge.start()
@@ -102,9 +107,9 @@ class TabletServer:
             self._capture_task = asyncio.create_task(self.capture_loop())
         if self.usb_bridge:
             self._usb_task = asyncio.create_task(self.usb_bridge.run())
+        self._otd_task = asyncio.create_task(self.otd.ensure())
         try:
-            async with server:
-                await server.serve_forever()
+            await asyncio.Event().wait()
         finally:
             tasks: list[asyncio.Task[None]] = []
             if self._capture_task:
@@ -113,6 +118,9 @@ class TabletServer:
             if self._usb_task:
                 self._usb_task.cancel()
                 tasks.append(self._usb_task)
+            if self._otd_task:
+                self._otd_task.cancel()
+                tasks.append(self._otd_task)
             await asyncio.gather(*tasks, return_exceptions=True)
             if self.udp_bridge:
                 self.udp_bridge.close()
@@ -127,105 +135,11 @@ class TabletServer:
                         self.usb_bridge.offer(access_unit)
                     if self.udp_bridge:
                         self.udp_bridge.offer(access_unit)
-                    for queue in tuple(self.clients):
-                        if queue.full():
-                            try:
-                                queue.get_nowait()
-                            except asyncio.QueueEmpty:
-                                pass
-                        queue.put_nowait(access_unit)
             except asyncio.CancelledError:
                 raise
             except Exception as error:
                 print(f"capture failed: {error}; retrying in 2 seconds")
                 await asyncio.sleep(2)
-
-    async def handle_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        try:
-            request = await read_http_request(reader)
-            target = urlsplit(request.target)
-            if request.headers.get("upgrade", "").lower() != "websocket":
-                await self.handle_http(writer, target.path)
-                return
-            if not self.authorized(parse_qs(target.query).get("token", [""])[0]):
-                await send_http_json(writer, 401, {"error": "invalid token"})
-                return
-            await accept_websocket(writer, request)
-            websocket = WebSocket(reader, writer)
-            if target.path == "/stream":
-                await self.handle_stream(websocket)
-            elif target.path == "/input":
-                await self.handle_input(websocket)
-            else:
-                await websocket.close()
-        except (asyncio.IncompleteReadError, ConnectionError, ValueError):
-            writer.close()
-            await writer.wait_closed()
-
-    async def handle_http(self, writer: asyncio.StreamWriter, path: str) -> None:
-        if path in {"/", "/health"}:
-            await send_http_json(writer, 200, {
-                "status": "ok", "streamClients": len(self.clients), "frames": self.frames,
-                "inputClients": self.input_clients,
-                "inputMode": self.tablet.input_mode,
-                "inputEvents": self.tablet.events_received,
-                "inputSamples": self.input_samples,
-                "inputRateHz": self.input_rate_hz,
-                "usbEnabled": self.usb_bridge is not None,
-                "usbConnected": self.usb_bridge.connected if self.usb_bridge else False,
-                "usbFrames": self.usb_bridge.frames_sent if self.usb_bridge else 0,
-                "usbDevicePort": self.usb_bridge.connected_port if self.usb_bridge else None,
-                "udpEnabled": self.udp_bridge is not None,
-                "udpClients": self.udp_bridge.connected_clients if self.udp_bridge else 0,
-                "udpFrames": self.udp_bridge.frames_sent if self.udp_bridge else 0,
-                "udpVideoPackets": self.udp_bridge.video_packets_sent if self.udp_bridge else 0,
-                "udpDroppedVideoFrames": self.udp_bridge.dropped_video_frames if self.udp_bridge else 0,
-                "udpInputPackets": self.udp_bridge.input_packets_received if self.udp_bridge else 0,
-                "udpDroppedInputPackets": self.udp_bridge.dropped_input_packets if self.udp_bridge else 0,
-                "udpError": self.udp_bridge.last_error if self.udp_bridge else None,
-                **self.metadata
-            })
-        else:
-            await send_http_json(writer, 404, {"error": "not found"})
-        writer.close()
-        await writer.wait_closed()
-
-    async def handle_stream(self, websocket: WebSocket) -> None:
-        queue: asyncio.Queue[bytes | dict[str, Any]] = asyncio.Queue(maxsize=1)
-        self.clients.add(queue)
-        try:
-            await websocket.send_json(self.metadata)
-            while True:
-                item = await queue.get()
-                if isinstance(item, bytes):
-                    await websocket.send_binary(item)
-                else:
-                    await websocket.send_json(item)
-        except (asyncio.CancelledError, ConnectionError):
-            pass
-        finally:
-            self.clients.discard(queue)
-            await websocket.close()
-
-    async def handle_input(self, websocket: WebSocket) -> None:
-        self.input_clients += 1
-        try:
-            while frame := await websocket.receive():
-                opcode, payload = frame
-                if opcode != 0x1:
-                    continue
-                try:
-                    message = json.loads(payload)
-                    if isinstance(message, dict):
-                        await self.handle_input_message(message)
-                except (ValueError, TypeError, json.JSONDecodeError):
-                    continue
-        except (asyncio.IncompleteReadError, ConnectionError, ValueError):
-            pass
-        finally:
-            self.input_clients -= 1
-            self.tablet.release()
-            await websocket.close()
 
     async def handle_input_message(self, message: dict[str, Any]) -> None:
         message_type = message.get("type")
@@ -264,6 +178,8 @@ class TabletServer:
     async def apply_stream_settings(self, message: dict[str, Any]) -> None:
         async with self._settings_lock:
             gaming_mode = bool(message.get("enabled", False))
+            if gaming_mode:
+                asyncio.create_task(self.otd.ensure(force=True))
             video_enabled = bool(message.get("videoEnabled", True))
             if gaming_mode:
                 width = max(640, min(3840, int(message.get("width", 1280)))) & ~1
@@ -316,17 +232,7 @@ class TabletServer:
 
     async def publish_metadata(self) -> None:
         metadata = self.metadata
-        for queue in tuple(self.clients):
-            while not queue.empty():
-                try:
-                    queue.get_nowait()
-                except asyncio.QueueEmpty:
-                    break
-            queue.put_nowait(metadata)
         if self.usb_bridge:
             await self.usb_bridge.update_metadata(metadata)
         if self.udp_bridge:
             self.udp_bridge.publish_metadata()
-
-    def authorized(self, supplied: str) -> bool:
-        return not self.options.token or hmac.compare_digest(self.options.token, supplied)
