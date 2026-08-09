@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+APPDIR=$(CDPATH= cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd)
+export IPAD_TABLET_BUNDLE_ROOT="$APPDIR/usr"
+export PATH="$APPDIR/usr/bin:$PATH"
+export LD_LIBRARY_PATH="$APPDIR/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export QT_PLUGIN_PATH="$APPDIR/usr/plugins${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
+# The AppImage ships Qt's XCB platform plugin. XWayland makes it work on
+# Wayland desktops as well, while avoiding ABI-sensitive distro plugins.
+export QT_QPA_PLATFORM=xcb
+exec "$APPDIR/usr/bin/ipad-tablet-backend-gui" "$@"

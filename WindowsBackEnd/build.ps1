@@ -2,11 +2,12 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 dotnet publish "$Root\src\IPadTablet.Backend\IPadTablet.Backend.csproj" `
-  -c Release -r win-x64 --self-contained false `
+  -c Release -r win-x64 --self-contained true `
+  -p:PublishSingleFile=true `
   -o "$Root\dist\backend"
 
 dotnet publish "$Root\src\IPadTablet.Backend.Gui\IPadTablet.Backend.Gui.csproj" `
-  -c Release -r win-x64 --self-contained false `
+  -c Release -r win-x64 --self-contained true `
   -p:PublishSingleFile=true `
   -o "$Root\dist\gui"
 

@@ -18,18 +18,21 @@ LAN transport is encrypted UDP only.
 
 ## Requirements
 
-- Python 3.11 or newer
 - FFmpeg
 - `wf-recorder` for wlroots/Wayland
 - VA-API users: a working VA driver and `vainfo`
-- OpenTabletDriver 0.6.7 or a compatible newer release, plus the .NET 8 SDK to build the included hub
+- OpenTabletDriver 0.6.7 or a compatible newer release
 - USB users: usbmuxd, `idevice_id` and `iproxy`
+
+The AppImage bundles the Qt 6 GUI, Python backend and compiled iPad OTD integration. It deliberately
+does not bundle FFmpeg, GPU drivers, OpenTabletDriver itself or usbmuxd because those components must
+match the host distribution and hardware.
 
 ### Arch Linux
 
 ```bash
 sudo pacman -S --needed python python-pip ffmpeg wf-recorder libva-utils \
-  dotnet-sdk usbmuxd libimobiledevice libusbmuxd
+  usbmuxd libimobiledevice libusbmuxd
 ```
 
 ### Debian 13 / Ubuntu-derived distributions
@@ -40,22 +43,40 @@ sudo apt install python3 python3-venv python3-pip ffmpeg wf-recorder vainfo \
   usbmuxd libimobiledevice-utils libusbmuxd-tools
 ```
 
-Install the .NET 8 SDK from Microsoft's distribution-specific packages if `dotnet --version` is not
-already 8 or newer. Package names above target Debian 13; older Ubuntu releases may need a newer
-`wf-recorder` build.
+Package names above target Debian 13; older Ubuntu releases may need a newer `wf-recorder` build.
 
 ### Fedora 43 or newer
 
 ```bash
 sudo dnf install python3 python3-pip ffmpeg-free wf-recorder libva-utils \
-  dotnet-sdk-8.0 usbmuxd libimobiledevice-utils libusbmuxd-utils
+  usbmuxd libimobiledevice-utils libusbmuxd-utils
 ```
 
 Fedora's `ffmpeg-free` may lack the H.264 encoder required by this project. If `ffmpeg -encoders`
 does not list `h264_vaapi` or `libx264`, install the full FFmpeg build from a codec-enabled repository
 approved for your system.
 
-## Install the backend
+## Install the Qt 6 AppImage
+
+Download `iPad-Tablet-Linux-x86_64.AppImage` and its checksum from the
+[latest GitHub release](https://github.com/Davidio1777/ipad-tablet-backends/releases/latest), then:
+
+```bash
+sha256sum -c iPad-Tablet-Linux-x86_64.AppImage.sha256
+chmod +x iPad-Tablet-Linux-x86_64.AppImage
+./iPad-Tablet-Linux-x86_64.AppImage
+```
+
+In the GUI, select **Install / Repair** once. It installs the bundled backend into `~/.local/bin`,
+installs and enables the iPad OpenTabletDriver integration for the current user, and opens one Polkit
+authentication dialog for the `ipadtablet` group and udev permissions. It never runs the streaming
+backend as root. Log out and back in once if the group was newly added.
+
+Select a screen, enter or generate a token, choose UDP and/or USB, then select **Start backend**.
+The token is passed to the backend through its environment and is not exposed in the process command
+line. UDP requires at least 16 UTF-8 bytes; USB-only mode does not require a token.
+
+## Manual source installation
 
 Run from this `LinuxBackEnd` directory:
 
@@ -69,7 +90,7 @@ python3 -m venv .venv
 Never combine `python -m venv` and the backend command. The first command creates `.venv`; subsequent
 commands start with `.venv/bin/...`.
 
-## Install the virtual tablet and OTD integration
+### Install the virtual tablet and OTD integration
 
 ```bash
 mkdir -p ~/.config/OpenTabletDriver/Configurations
@@ -96,6 +117,9 @@ otd savedefaultsettings
 systemctl --user restart opentabletdriver.service
 ```
 
+Building that plugin manually requires the .NET 8 SDK. Release AppImages already contain the compiled
+plugin and do not require the SDK.
+
 At backend startup, the service retries `otd detect`, runs:
 
 ```text
@@ -104,6 +128,17 @@ otd setoutputmode "Apple iPad Pro (Apple Pencil)" "OpenTabletDriver.Desktop.Outp
 
 and saves the settings. It repeats this when Gaming Mode is enabled. Disable that behavior with
 `--no-otd-auto-config`, or override `--otd-cli`, `--otd-tablet` and `--otd-output-mode`.
+
+## Build the AppImage
+
+The release build uses Ubuntu 22.04 for broad glibc compatibility. A local build requires Python 3.11
+or newer, CMake, Ninja, a C++20 compiler, Qt 6 development files, qmake6, curl and the .NET 8 SDK:
+
+```bash
+LinuxBackEnd/appimage/build-appimage.sh
+```
+
+The result and its checksum are written to `LinuxBackEnd/dist/`.
 
 ## Start over encrypted UDP
 

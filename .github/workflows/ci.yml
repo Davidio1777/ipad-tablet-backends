@@ -21,6 +21,22 @@ jobs:
       - run: python -m unittest discover -s tests -v
         working-directory: LinuxBackEnd
 
+  linux-gui:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt 6 build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build qt6-base-dev
+      - run: cmake -S LinuxBackEnd/gui -B build/linux-gui -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build/linux-gui --parallel
+      - name: Check AppImage scripts
+        run: |
+          sh -n LinuxBackEnd/appimage/AppRun
+          sh -n LinuxBackEnd/appimage/ipad-tablet-install-helper
+          bash -n LinuxBackEnd/appimage/build-appimage.sh
+
   dotnet:
     runs-on: windows-latest
     steps:

@@ -7,6 +7,8 @@ __pycache__/
 **/bin/
 **/obj/
 **/dist/
+/build/
+/LinuxBackEnd/build/
 *.dll
 *.exe
 *.pdb

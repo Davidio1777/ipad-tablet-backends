@@ -21,33 +21,53 @@ jobs:
         run: WindowsBackEnd/build.ps1
       - name: Package Windows distribution
         shell: pwsh
-        run: Compress-Archive -Path WindowsBackEnd/dist/* -DestinationPath iPad-Tablet-Windows-x64.zip
+        run: |
+          Compress-Archive -Path WindowsBackEnd/dist/* -DestinationPath iPad-Tablet-Windows-x64.zip
+          $hash = (Get-FileHash iPad-Tablet-Windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  iPad-Tablet-Windows-x64.zip" | Set-Content iPad-Tablet-Windows-x64.zip.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: iPad-Tablet-Windows-x64
-          path: iPad-Tablet-Windows-x64.zip
-      - uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: iPad-Tablet-Windows-x64.zip
-          generate_release_notes: true
+          path: |
+            iPad-Tablet-Windows-x64.zip
+            iPad-Tablet-Windows-x64.zip.sha256
 
   linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+      - name: Install Qt and AppImage build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build qmake6 \
+            qt6-base-dev qt6-base-dev-tools libgl1-mesa-dev libfuse2
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build Qt 6 AppImage
+        run: LinuxBackEnd/appimage/build-appimage.sh
       - run: python -m pip install build
-      - run: python -m build
+      - run: python -m build --wheel
         working-directory: LinuxBackEnd
       - uses: actions/upload-artifact@v4
         with:
           name: iPad-Tablet-Linux
           path: LinuxBackEnd/dist/*
-      - uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
         with:
-          files: LinuxBackEnd/dist/*
+          pattern: iPad-Tablet-*
+          path: release-assets
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
           generate_release_notes: true

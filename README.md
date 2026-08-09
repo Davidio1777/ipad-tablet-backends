@@ -14,6 +14,18 @@ and is not included here.
 The backends use the same protocol and support live Gaming Mode changes for resolution, 60/120 FPS,
 bitrate, CBR/VBR and a video-off tablet-only mode. LAN transport is encrypted UDP only.
 
+## Downloads
+
+Versioned, ready-to-run packages are published on the
+[GitHub Releases page](https://github.com/Davidio1777/ipad-tablet-backends/releases):
+
+- Linux x86_64 Qt 6 AppImage, containing the GUI, backend and iPad OTD integration
+- Windows 11 x64 ZIP, containing the self-contained GUI/backend executables and iPad OTD integration
+
+Both downloads include a SHA-256 checksum file. FFmpeg, OpenTabletDriver and the optional USB tools
+remain system components because their correct builds depend on the operating system, GPU and OTD
+installation.
+
 ## Network security
 
 LAN traffic uses two UDP ports: `8766` for video and metadata, and `8767` for Pencil and control data.

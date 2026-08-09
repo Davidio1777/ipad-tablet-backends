@@ -6,5 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
     <AssemblyName>ipad-tablet-backend</AssemblyName>
+    <Version>0.0.1</Version>
   </PropertyGroup>
 </Project>

@@ -1,0 +1,72 @@
+#!/bin/sh
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "This helper must be started through pkexec." >&2
+  exit 1
+fi
+if [ "${1:-}" != "install-system" ] || [ "$#" -ne 1 ]; then
+  echo "Only the install-system action is supported." >&2
+  exit 2
+fi
+
+caller_uid=${PKEXEC_UID:-}
+case "$caller_uid" in
+  ''|*[!0-9]*) echo "PKEXEC_UID is missing or invalid." >&2; exit 3 ;;
+esac
+caller_user=$(getent passwd "$caller_uid" | cut -d: -f1)
+if [ -z "$caller_user" ]; then
+  echo "Could not resolve the requesting user." >&2
+  exit 3
+fi
+
+temporary_dir=$(mktemp -d)
+trap 'rm -rf "$temporary_dir"' EXIT HUP INT TERM
+
+cat > "$temporary_dir/99-ipad-tablet-uhid.rules" <<'RULES'
+KERNEL=="uhid", SUBSYSTEM=="misc", OPTIONS+="static_node=uhid", GROUP="ipadtablet", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ENV{HID_NAME}=="Apple iPad Pro (Apple Pencil)", ENV{HID_UNIQ}=="ipad-pencil-network", GROUP="ipadtablet", MODE="0660", SYMLINK+="ipad-pencil", TAG+="uaccess"
+SUBSYSTEM=="input", ENV{NAME}=="Apple iPad Pro (Apple Pencil)", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+RULES
+
+cat > "$temporary_dir/dev.david.ipad-tablet.install.policy" <<'POLICY'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>iPad Tablet Backend</vendor>
+  <vendor_url>https://github.com/Davidio1777/ipad-tablet-backends</vendor_url>
+  <action id="dev.david.ipad-tablet.install">
+    <description>Install iPad Tablet system integration</description>
+    <description xml:lang="de">iPad-Tablet-Systemintegration installieren</description>
+    <message>Authentication is required to install iPad Tablet udev permissions</message>
+    <message xml:lang="de">Zum Installieren der iPad-Tablet-udev-Rechte ist eine Anmeldung erforderlich</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/ipad-tablet/install-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">install-system</annotate>
+  </action>
+</policyconfig>
+POLICY
+
+getent group ipadtablet >/dev/null 2>&1 || groupadd --system ipadtablet
+usermod -a -G ipadtablet "$caller_user"
+install -Dm0644 "$temporary_dir/99-ipad-tablet-uhid.rules" /etc/udev/rules.d/99-ipad-tablet-uhid.rules
+if [ "$(readlink -f -- "$0")" != "/usr/libexec/ipad-tablet/install-helper" ]; then
+  install -Dm0755 "$0" /usr/libexec/ipad-tablet/install-helper
+fi
+install -Dm0644 "$temporary_dir/dev.david.ipad-tablet.install.policy" \
+  /usr/share/polkit-1/actions/dev.david.ipad-tablet.install.policy
+
+modprobe uhid || true
+udevadm control --reload-rules
+udevadm trigger --action=add --sysname-match=uhid || true
+udevadm trigger --action=change --subsystem-match=hidraw || true
+
+echo "Installed udev permissions and added $caller_user to ipadtablet."

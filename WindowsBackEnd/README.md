@@ -18,11 +18,22 @@ LAN transport is encrypted UDP only.
 ## Requirements
 
 1. Windows 11 x64
-2. [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) to build, and the .NET 8 Desktop
-   Runtime to run framework-dependent releases
+2. [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) only when building from source;
+   release executables are self-contained
 3. A full Windows FFmpeg build with `gdigrab` and at least one H.264 encoder in `PATH`
 4. [OpenTabletDriver](https://opentabletdriver.net/) 0.6.7 or a compatible newer release
 5. Optional USB: a Windows `iproxy.exe`/libusbmuxd build and Apple Mobile Device support
+
+## Install the release package
+
+Download `iPad-Tablet-Windows-x64.zip` and its checksum from the
+[latest GitHub release](https://github.com/Davidio1777/ipad-tablet-backends/releases/latest), verify the
+SHA-256 hash, and extract the complete archive. Start `gui\iPadTabletBackend.exe`; keep the `gui`,
+`backend` and `otd` folders together.
+
+The GUI lets you select a monitor, enter or generate the encrypted UDP token, configure capture and
+encoding, install/repair the bundled iPad OTD integration, and start or stop the backend. The backend
+and GUI do not need a separately installed .NET runtime.
 
 ## Build
 
@@ -55,9 +66,9 @@ Restart OTD and run **Detect**. The backend retries detection and selects
 
 ## Run with the GUI
 
-Start `dist\gui\iPadTabletBackend.exe`, generate a token, select the capture rectangle and encoder,
-then choose **Start backend**. For LAN use, permit UDP 8766 and 8767 in Windows Defender Firewall for
-private networks only.
+Start `dist\gui\iPadTabletBackend.exe`, generate a token, select the monitor or adjust its capture
+rectangle and encoder, then choose **Start backend**. For LAN use, permit UDP 8766 and 8767 in Windows
+Defender Firewall for private networks only.
 
 ## Run from PowerShell
 

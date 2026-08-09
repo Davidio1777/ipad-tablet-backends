@@ -3,22 +3,78 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Windows;
 using System.Windows.Controls;
+using MessageBox = System.Windows.MessageBox;
+using Screen = System.Windows.Forms.Screen;
 
 namespace IPadTablet.Backend.Gui;
 
 public partial class MainWindow : Window
 {
+    private sealed record DisplayOption(string DeviceName, int X, int Y, int Width, int Height)
+    {
+        public override string ToString() => $"{DeviceName} — {Width}×{Height} at {X},{Y}";
+    }
+
     private Process? _backend;
 
     public MainWindow()
     {
         InitializeComponent();
         TokenBox.Password = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
+        RefreshScreens();
         Closing += (_, _) => StopBackend();
+    }
+
+    private void RefreshScreens_Click(object sender, RoutedEventArgs e) => RefreshScreens();
+
+    private void RefreshScreens()
+    {
+        var previous = (ScreenBox.SelectedItem as DisplayOption)?.DeviceName;
+        ScreenBox.Items.Clear();
+        foreach (var screen in Screen.AllScreens)
+        {
+            var bounds = screen.Bounds;
+            ScreenBox.Items.Add(new DisplayOption(screen.DeviceName, bounds.X, bounds.Y, bounds.Width, bounds.Height));
+        }
+        ScreenBox.SelectedItem = ScreenBox.Items.Cast<DisplayOption>()
+            .FirstOrDefault(display => display.DeviceName == previous) ?? ScreenBox.Items.Cast<object>().FirstOrDefault();
+    }
+
+    private void ScreenBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ScreenBox.SelectedItem is not DisplayOption display) return;
+        SourceXBox.Text = display.X.ToString();
+        SourceYBox.Text = display.Y.ToString();
+        SourceWidthBox.Text = display.Width.ToString();
+        SourceHeightBox.Text = display.Height.ToString();
     }
 
     private void GenerateToken_Click(object sender, RoutedEventArgs e) =>
         TokenBox.Password = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
+
+    private void InstallOtd_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var source = FindOtdDirectory();
+            var destination = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenTabletDriver");
+            var plugins = Directory.CreateDirectory(Path.Combine(destination, "Plugins")).FullName;
+            var configurations = Directory.CreateDirectory(Path.Combine(destination, "Configurations")).FullName;
+            File.Copy(Path.Combine(source, "IPadPencilWindowsHub.dll"),
+                Path.Combine(plugins, "IPadPencilWindowsHub.dll"), true);
+            File.Copy(Path.Combine(source, "Apple-iPad-Pro-Windows.json"),
+                Path.Combine(configurations, "Apple-iPad-Pro-Windows.json"), true);
+            AppendLog($"Installed iPad OTD integration in {destination}");
+            MessageBox.Show(this,
+                "The iPad OTD plugin and tablet configuration are installed. Restart OpenTabletDriver and click Detect.",
+                "Installation complete", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "OTD installation failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
 
     private void Start_Click(object sender, RoutedEventArgs e)
     {
@@ -97,8 +153,8 @@ public partial class MainWindow : Window
         info.ArgumentList.Add(value.Trim());
     }
 
-    private static string Selected(ComboBox box) =>
-        (box.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "";
+    private static string Selected(System.Windows.Controls.ComboBox box) =>
+        (box.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content?.ToString() ?? "";
 
     private static string FindBackend()
     {
@@ -110,6 +166,19 @@ public partial class MainWindow : Window
         };
         return candidates.FirstOrDefault(File.Exists)
             ?? throw new FileNotFoundException("ipad-tablet-backend.exe was not found. Keep the gui and backend folders together.");
+    }
+
+    private static string FindOtdDirectory()
+    {
+        var candidates = new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, "otd"),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "otd"))
+        };
+        return candidates.FirstOrDefault(path =>
+            File.Exists(Path.Combine(path, "IPadPencilWindowsHub.dll")) &&
+            File.Exists(Path.Combine(path, "Apple-iPad-Pro-Windows.json")))
+            ?? throw new DirectoryNotFoundException("The bundled OTD integration folder was not found. Keep gui, backend and otd together.");
     }
 
     private void Stop_Click(object sender, RoutedEventArgs e) => StopBackend();
