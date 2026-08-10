@@ -4,6 +4,9 @@ set -eu
 APPDIR=$(CDPATH= cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd)
 export IPAD_TABLET_BUNDLE_ROOT="$APPDIR/usr"
 export PATH="$APPDIR/usr/bin:$PATH"
+# The GUI needs the AppImage libraries, but backend children such as
+# wf-recorder and iproxy must use the host distribution's libraries.
+export IPAD_TABLET_HOST_LD_LIBRARY_PATH="${LD_LIBRARY_PATH-}"
 export LD_LIBRARY_PATH="$APPDIR/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export QT_PLUGIN_PATH="$APPDIR/usr/plugins${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
 # The AppImage ships Qt's XCB platform plugin. XWayland makes it work on

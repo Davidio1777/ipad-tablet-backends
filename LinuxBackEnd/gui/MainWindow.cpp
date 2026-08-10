@@ -24,6 +24,12 @@
 #include <QStandardPaths>
 #include <QVBoxLayout>
 
+#ifdef Q_OS_LINUX
+#include <signal.h>
+#include <sys/prctl.h>
+#include <unistd.h>
+#endif
+
 namespace {
 QString selectedText(const QComboBox *box)
 {
@@ -51,6 +57,13 @@ bool copyExecutable(const QString &source, const QString &destination, QString *
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 {
+#ifdef Q_OS_LINUX
+    backend_.setChildProcessModifier([] {
+        // Let the backend clean up iproxy if the launcher disappears.
+        ::prctl(PR_SET_PDEATHSIG, SIGTERM);
+        if (::getppid() == 1) ::_exit(1);
+    });
+#endif
     buildUi();
     connect(&backend_, &QProcess::readyReadStandardOutput, this, &MainWindow::readBackendOutput);
     connect(&backend_, &QProcess::readyReadStandardError, this, &MainWindow::readBackendOutput);
@@ -409,13 +422,27 @@ void MainWindow::startBackend()
         arguments << QStringLiteral("--source") << QStringLiteral("wayland")
                   << QStringLiteral("--output") << screen.value(QStringLiteral("name")).toString();
     }
-    if (!vaapiEdit_->text().trimmed().isEmpty())
-        arguments << QStringLiteral("--vaapi-device") << vaapiEdit_->text().trimmed();
+    const QString vaapiDevice = vaapiEdit_->text().trimmed();
+    if (!vaapiDevice.isEmpty()
+        && vaapiDevice.compare(QStringLiteral("auto"), Qt::CaseInsensitive) != 0
+        && vaapiDevice.compare(QStringLiteral("automatic"), Qt::CaseInsensitive) != 0)
+        arguments << QStringLiteral("--vaapi-device") << vaapiDevice;
     if (!udpCheck_->isChecked()) arguments << QStringLiteral("--no-udp");
     if (usbCheck_->isChecked()) arguments << QStringLiteral("--usb");
     if (!otdCheck_->isChecked()) arguments << QStringLiteral("--no-otd-auto-config");
 
     auto environment = QProcessEnvironment::systemEnvironment();
+    // AppRun injects Qt libraries for the launcher. Passing those libraries to
+    // host tools breaks rolling distributions (for example wf-recorder loading
+    // the AppImage's older libsystemd together with the host libmount).
+    const QString hostLibraryPath = environment.value(QStringLiteral("IPAD_TABLET_HOST_LD_LIBRARY_PATH"));
+    if (hostLibraryPath.isEmpty())
+        environment.remove(QStringLiteral("LD_LIBRARY_PATH"));
+    else
+        environment.insert(QStringLiteral("LD_LIBRARY_PATH"), hostLibraryPath);
+    environment.remove(QStringLiteral("IPAD_TABLET_HOST_LD_LIBRARY_PATH"));
+    environment.remove(QStringLiteral("QT_PLUGIN_PATH"));
+    environment.remove(QStringLiteral("QT_QPA_PLATFORM"));
     environment.insert(QStringLiteral("IPAD_TABLET_TOKEN"), tokenEdit_->text());
     backend_.setProcessEnvironment(environment);
     backend_.setProgram(executable);

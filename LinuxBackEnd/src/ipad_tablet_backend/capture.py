@@ -102,6 +102,8 @@ def discover_output_geometry(output: str | None) -> tuple[int, int, int, int] | 
 
 
 def select_vaapi_device(explicit: str | None) -> str | None:
+    if explicit and explicit.strip().casefold() in {"auto", "automatic"}:
+        explicit = None
     if explicit:
         return explicit if Path(explicit).exists() else None
     devices = sorted(Path("/dev/dri").glob("renderD*"))
