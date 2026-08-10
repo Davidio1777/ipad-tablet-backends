@@ -11,6 +11,8 @@ internal sealed class BackendOptions
     public string Token { get; private set; } = Environment.GetEnvironmentVariable("IPAD_TABLET_TOKEN") ?? "";
     public string Ffmpeg { get; private set; } = "ffmpeg.exe";
     public string Encoder { get; private set; } = "auto";
+    public string CaptureBackend { get; private set; } = "auto";
+    public int DisplayIndex { get; private set; }
     public bool NoUdp { get; private set; }
     public int UdpVideoPort { get; private set; } = 8766;
     public int UdpInputPort { get; private set; } = 8767;
@@ -58,12 +60,18 @@ internal sealed class BackendOptions
                 case "--token": options.Token = Value(ref i, args[i]); break;
                 case "--ffmpeg": options.Ffmpeg = Value(ref i, args[i]); break;
                 case "--encoder": options.Encoder = Value(ref i, args[i]).ToLowerInvariant(); break;
+                case "--capture": options.CaptureBackend = Value(ref i, args[i]).ToLowerInvariant(); break;
+                case "--display-index": options.DisplayIndex = IntValue(ref i, args[i]); break;
                 case "--no-udp": options.NoUdp = true; break;
                 case "--udp-video-port": options.UdpVideoPort = IntValue(ref i, args[i]); break;
                 case "--udp-input-port": options.UdpInputPort = IntValue(ref i, args[i]); break;
                 case "--usb": options.Usb = true; break;
                 case "--iproxy": options.Iproxy = Value(ref i, args[i]); break;
                 case "--usb-port": options.UsbPort = IntValue(ref i, args[i]); break;
+                case "--usb-port-fallbacks":
+                    _ = IntValue(ref i, args[i]);
+                    Console.WriteLine("--usb-port-fallbacks is deprecated; USB now uses only port 18765.");
+                    break;
                 case "--source-x": options.SourceX = IntValue(ref i, args[i]); break;
                 case "--source-y": options.SourceY = IntValue(ref i, args[i]); break;
                 case "--source-width": options.SourceWidth = IntValue(ref i, args[i]); break;
@@ -86,16 +94,24 @@ internal sealed class BackendOptions
             throw new ArgumentException("Encrypted UDP requires a token containing at least 16 UTF-8 bytes.");
         if (options.NoUdp && !options.Usb)
             throw new ArgumentException("At least encrypted UDP or USB must be enabled.");
+        if (!options.NoUdp && (options.UdpVideoPort is < 1 or > 65535
+                               || options.UdpInputPort is < 1 or > 65535))
+            throw new ArgumentException("UDP ports must be between 1 and 65535.");
+        if (options.UsbPort is < 1 or > 65535)
+            throw new ArgumentException("The USB port must be between 1 and 65535.");
         if (options.InputMode is not ("otd" or "none"))
             throw new ArgumentException("--input-mode must be otd or none.");
+        if (options.CaptureBackend is not ("auto" or "dda" or "gdi") || options.DisplayIndex < 0)
+            throw new ArgumentException("--capture must be auto, dda or gdi; --display-index must not be negative.");
         if (rateControl is not ("cbr" or "vbr"))
             throw new ArgumentException("--rate-control must be cbr or vbr.");
         options.BaseProfile = new(width & ~1, height & ~1, Math.Clamp(fps, 30, 120),
             Math.Clamp(bitrate, 1_000_000, 50_000_000), rateControl, false);
         options.Ffmpeg = WindowsExecutableLocator.Find(options.Ffmpeg, WindowsTool.Ffmpeg)
             ?? options.Ffmpeg;
-        options.OtdCli = WindowsExecutableLocator.Find(
-            options.OtdCli, WindowsTool.OpenTabletDriverConsole) ?? options.OtdCli;
+        if (options.OtdAutoConfig && options.InputMode == "otd")
+            options.OtdCli = WindowsExecutableLocator.Find(
+                options.OtdCli, WindowsTool.OpenTabletDriverConsole) ?? options.OtdCli;
         if (options.Usb)
             options.Iproxy = WindowsExecutableLocator.Find(options.Iproxy, WindowsTool.Iproxy)
                 ?? options.Iproxy;
@@ -108,6 +124,7 @@ internal sealed class BackendOptions
 
           --host 0.0.0.0 --token LONG_RANDOM_TOKEN
           --encoder auto|h264_amf|h264_nvenc|h264_qsv|libx264
+          --capture auto|dda|gdi --display-index 0
           --source-x 0 --source-y 0 --source-width 2560 --source-height 1440
           --width 2560 --height 1440 --fps 60 --bitrate 16000000
           --rate-control cbr|vbr --input-mode otd|none

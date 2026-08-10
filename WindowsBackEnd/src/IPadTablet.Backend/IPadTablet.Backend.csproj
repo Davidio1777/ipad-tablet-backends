@@ -10,5 +10,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\Shared\WindowsExecutableLocator.cs" Link="WindowsExecutableLocator.cs" />
+    <InternalsVisibleTo Include="IPadTablet.Backend.Tests" />
   </ItemGroup>
 </Project>

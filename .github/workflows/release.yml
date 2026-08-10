@@ -19,6 +19,11 @@ jobs:
       - name: Build Windows distribution
         shell: pwsh
         run: WindowsBackEnd/build.ps1
+      - name: Test Windows UDP and USB protocols
+        shell: pwsh
+        run: |
+          $env:IPAD_TABLET_BACKEND_EXE = "$PWD\WindowsBackEnd\dist\backend\ipad-tablet-backend.exe"
+          dotnet run --project WindowsBackEnd/tests/IPadTablet.Backend.Tests/IPadTablet.Backend.Tests.csproj -c Release
       - name: Package Windows distribution
         shell: pwsh
         run: |

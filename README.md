@@ -22,9 +22,9 @@ Versioned, ready-to-run packages are published on the
 - Linux x86_64 Qt 6 AppImage, containing the GUI, backend and iPad OTD integration
 - Windows 11 x64 ZIP, containing the self-contained GUI/backend executables and iPad OTD integration
 
-Both downloads include a SHA-256 checksum file. FFmpeg, OpenTabletDriver and the optional USB tools
-remain system components because their correct builds depend on the operating system, GPU and OTD
-installation.
+Both downloads include a SHA-256 checksum file. The Windows package bundles FFmpeg and a pinned,
+checksum-verified x64 `iproxy` runtime. OpenTabletDriver and Apple's current Apple Devices app remain
+system components.
 
 ## Network security
 

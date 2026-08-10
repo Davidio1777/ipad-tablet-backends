@@ -27,6 +27,8 @@ public partial class MainWindow : Window
         OtdCliBox.Text = WindowsExecutableLocator.Find(
             "OpenTabletDriver.Console.exe", WindowsTool.OpenTabletDriverConsole)
             ?? "OpenTabletDriver.Console.exe";
+        IproxyBox.Text = WindowsExecutableLocator.Find("iproxy.exe", WindowsTool.Iproxy)
+            ?? "iproxy.exe";
         RefreshScreens();
         Closing += (_, _) => StopBackend();
     }
@@ -63,17 +65,25 @@ public partial class MainWindow : Window
         try
         {
             var source = FindOtdDirectory();
-            var destination = Path.Combine(
+            OtdCliBox.Text = RequireExecutable(OtdCliBox.Text,
+                WindowsTool.OpenTabletDriverConsole, "Select OpenTabletDriver.Console.exe",
+                "OpenTabletDriver console|OpenTabletDriver.Console.exe;otd.exe");
+            var otdDirectory = Path.GetDirectoryName(Path.GetFullPath(OtdCliBox.Text))!;
+            var portable = Path.Combine(otdDirectory, "userdata");
+            var destination = Directory.Exists(portable) ? portable : Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenTabletDriver");
-            var plugins = Directory.CreateDirectory(Path.Combine(destination, "Plugins")).FullName;
+            var pluginRoot = Directory.CreateDirectory(Path.Combine(destination, "Plugins")).FullName;
+            var plugins = Directory.CreateDirectory(Path.Combine(pluginRoot, "IPadPencilWindowsHub")).FullName;
             var configurations = Directory.CreateDirectory(Path.Combine(destination, "Configurations")).FullName;
             File.Copy(Path.Combine(source, "IPadPencilWindowsHub.dll"),
                 Path.Combine(plugins, "IPadPencilWindowsHub.dll"), true);
             File.Copy(Path.Combine(source, "Apple-iPad-Pro-Windows.json"),
                 Path.Combine(configurations, "Apple-iPad-Pro-Windows.json"), true);
+            var legacy = Path.Combine(pluginRoot, "IPadPencilWindowsHub.dll");
+            if (File.Exists(legacy)) File.Delete(legacy);
             AppendLog($"Installed iPad OTD integration in {destination}");
             MessageBox.Show(this,
-                "The iPad OTD plugin and tablet configuration are installed. Restart OpenTabletDriver and click Detect.",
+                "The iPad OTD integration was repaired. Start the backend; it will start the OTD daemon, enable the plugin, and detect the tablet automatically.",
                 "Installation complete", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
@@ -124,6 +134,8 @@ public partial class MainWindow : Window
         info.ArgumentList.Add("serve");
         Add(info, "--ffmpeg", FfmpegBox.Text);
         Add(info, "--encoder", Selected(EncoderBox));
+        Add(info, "--capture", "auto");
+        Add(info, "--display-index", Math.Max(0, ScreenBox.SelectedIndex).ToString());
         Add(info, "--source-x", SourceXBox.Text);
         Add(info, "--source-y", SourceYBox.Text);
         Add(info, "--source-width", SourceWidthBox.Text);
@@ -146,6 +158,8 @@ public partial class MainWindow : Window
 
         if (UsbEnabled.IsChecked == true)
         {
+            IproxyBox.Text = RequireExecutable(
+                IproxyBox.Text, WindowsTool.Iproxy, "Select iproxy.exe", "iproxy.exe|iproxy.exe");
             info.ArgumentList.Add("--usb");
             Add(info, "--iproxy", IproxyBox.Text);
         }
@@ -200,6 +214,54 @@ public partial class MainWindow : Window
     private void BrowseOtd_Click(object sender, RoutedEventArgs e) =>
         OtdCliBox.Text = BrowseExecutable("Select OpenTabletDriver.Console.exe",
             "OpenTabletDriver console|OpenTabletDriver.Console.exe;otd.exe") ?? OtdCliBox.Text;
+
+    private void BrowseIproxy_Click(object sender, RoutedEventArgs e) =>
+        IproxyBox.Text = BrowseExecutable("Select iproxy.exe", "iproxy.exe|iproxy.exe") ?? IproxyBox.Text;
+
+    private async void RepairFirewall_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (!int.TryParse(VideoPortBox.Text, out var videoPort) || videoPort is < 1 or > 65535
+                || !int.TryParse(InputPortBox.Text, out var inputPort) || inputPort is < 1 or > 65535)
+                throw new InvalidOperationException("UDP ports must be numbers between 1 and 65535.");
+
+            const string ruleName = "iPad Tablet Backend UDP (Private)";
+            var backend = FindBackend().Replace("'", "''");
+            var script = $"$ErrorActionPreference='Stop'; " +
+                $"Get-NetFirewallRule -DisplayName '{ruleName}' -ErrorAction SilentlyContinue | Remove-NetFirewallRule; " +
+                $"New-NetFirewallRule -DisplayName '{ruleName}' -Direction Inbound -Action Allow " +
+                $"-Enabled True -Profile Private -Protocol UDP -LocalPort {videoPort},{inputPort} " +
+                $"-Program '{backend}' | Out-Null";
+            var exitCode = await RunElevatedPowerShellAsync(script);
+            if (exitCode != 0) throw new InvalidOperationException($"Firewall repair exited with code {exitCode}.");
+            AppendLog($"Repaired private Windows Firewall rule for UDP {videoPort}/{inputPort}.");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Firewall repair failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private static async Task<int> RunElevatedPowerShellAsync(string script)
+    {
+        var info = new ProcessStartInfo(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.System),
+            "WindowsPowerShell", "v1.0", "powershell.exe"))
+        {
+            UseShellExecute = true,
+            Verb = "runas",
+            WindowStyle = ProcessWindowStyle.Hidden
+        };
+        info.ArgumentList.Add("-NoProfile");
+        info.ArgumentList.Add("-NonInteractive");
+        info.ArgumentList.Add("-EncodedCommand");
+        info.ArgumentList.Add(Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script)));
+        using var process = Process.Start(info)
+            ?? throw new InvalidOperationException("Windows Firewall could not be opened.");
+        await process.WaitForExitAsync();
+        return process.ExitCode;
+    }
 
     private string RequireExecutable(string configured, WindowsTool tool, string title, string filter)
     {
