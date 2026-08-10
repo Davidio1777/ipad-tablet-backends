@@ -5,10 +5,12 @@ OpenTabletDriver device hub. It offers both a console executable and a WPF GUI.
 
 ## Features
 
-- FFmpeg `gdigrab` capture
+- FFmpeg Desktop Duplication capture with stable monotonic frame timing
 - automatic AMD AMF, NVIDIA NVENC, Intel QSV or `libx264` selection
 - AES-256-GCM encrypted UDP on `8766` (video) and `8767` (Pencil/control)
 - optional direct USB with usbmuxd/iproxy, without a LAN token
+- synchronized Desktop Duplication capture on Windows with automatic GDI fallback
+- automatic low-latency scRGB/HDR desktop color correction for the SDR H.264 iPad stream
 - named-pipe OpenTabletDriver hub with automatic absolute-mode setup
 - Gaming Mode settings and a video-off tablet-only mode
 - graphical launcher for connection, capture, encoder and OTD settings
@@ -21,7 +23,8 @@ LAN transport is encrypted UDP only.
 2. [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) only when building from source;
    release executables are self-contained
 3. [OpenTabletDriver](https://opentabletdriver.net/) 0.6.7 or a compatible newer release
-4. Optional USB: a Windows `iproxy.exe`/libusbmuxd build and Apple Mobile Device support
+4. USB: the current **Apple Devices** app from Microsoft Store; start it once, unlock the iPad,
+   and accept **Trust This Computer**. A current checksum-pinned x64 `iproxy.exe` runtime is bundled.
 
 ## Install the release package
 
@@ -32,8 +35,8 @@ SHA-256 hash, and extract the complete archive. Start `gui\iPadTabletBackend.exe
 
 The GUI lets you select a monitor, enter or generate the encrypted UDP token, configure capture and
 encoding, install/repair the bundled iPad OTD integration, and start or stop the backend. The backend
-and GUI do not need a separately installed .NET runtime. FFmpeg is bundled in `tools`, so it remains
-available after a reboot without changing the system `PATH`.
+and GUI do not need a separately installed .NET runtime. FFmpeg and the compatible Windows x64
+`iproxy` runtime are bundled in `tools`, so they remain available without changing the system `PATH`.
 
 The launcher automatically searches the release package, `PATH`, common WinGet/Scoop locations and
 the current user's folders for FFmpeg and `OpenTabletDriver.Console.exe`. If a portable OTD copy is
@@ -48,9 +51,10 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\build.ps1
 ```
 
-The build script downloads the current BtbN static GPL FFmpeg build and includes its license and
-build information in `dist\tools`. Set `IPAD_TABLET_SKIP_FFMPEG=1` only when producing a developer
-build that intentionally uses an external FFmpeg installation.
+The build script downloads the current BtbN static GPL FFmpeg build and a pinned, checksum-verified
+Windows x64 libimobiledevice/iproxy package. Their notices and licenses are included in `dist\tools`.
+Set `IPAD_TABLET_SKIP_FFMPEG=1` or `IPAD_TABLET_SKIP_USB_TOOLS=1` only for developer builds that
+intentionally use external tools.
 
 Outputs:
 
@@ -63,14 +67,17 @@ the sibling backend directory and displays its live log.
 
 ## Install OpenTabletDriver integration
 
-Close OpenTabletDriver completely, then run:
+For portable OTD, point the GUI at its `OpenTabletDriver.Console.exe`, then click
+**Install / Repair iPad OTD integration**. The installer uses that portable copy's `userdata`
+directory. For a scripted install, run:
 
 ```powershell
 .\install-otd.ps1
 ```
 
-Restart OTD and run **Detect**. The backend retries detection and selects
-`OpenTabletDriver.Desktop.Output.AbsoluteMode` at startup and whenever Gaming Mode is enabled.
+At startup the backend starts the OTD daemon if needed, enables the iPad device-hub tool, retries
+detection, and selects `OpenTabletDriver.Desktop.Output.AbsoluteMode`. A successful setup is logged
+as `OTD ready`; a CLI exit code alone is not treated as success.
 
 ## Run with the GUI
 
@@ -110,12 +117,23 @@ dist\backend\ipad-tablet-backend.exe serve `
 ```
 
 Run with `--help` for every option. `--encoder auto` probes AMF, NVENC, QSV and finally `libx264`.
+`--capture auto` uses Windows Desktop Duplication at the requested refresh rate and falls back to
+GDI only if duplication cannot start. A previously healthy DDA session is recreated after display
+mode or HDR changes instead of being permanently downgraded. GDI fallback runs at its real maximum
+of 60 FPS rather than synthesizing 120 FPS. `--capture dda` or `--capture gdi` can force either path.
+When Windows HDR is active, the backend probes for the 16-bit scRGB desktop format and applies a
+calibrated low-cost SDR correction while tagging the H.264 stream explicitly as limited-range BT.709.
 
 ## USB details
 
-Unlock the iPad and accept **Trust This Computer** before starting. The backend launches `iproxy`
+Open Apple Devices once, unlock the iPad and accept **Trust This Computer** before starting. The backend launches `iproxy`
 against the app listener. usbmuxd pairing is the trust boundary, so USB-only mode does not require,
 send or validate the LAN token. No firewall rule is required for USB-only mode.
+
+The backend first queries the bundled `idevice_id` client, which speaks the real usbmux protocol,
+and distinguishes Apple service, device enumeration and app-listener failures in its log. It then
+starts exactly one proxy (`127.0.0.1:18765` to iPad port `18765`) for the detected USB UDID. Apple
+Mobile Device Support must still be installed and running so Windows can communicate with the paired iPad.
 
 ## Gaming Mode
 
@@ -133,6 +151,7 @@ contain at least 16 UTF-8 bytes. Do not forward UDP 8766/8767 to the public inte
 
 - Confirm `ffmpeg -encoders` lists the selected encoder.
 - Run `otd detect` after the backend creates the device hub.
-- Use a private Windows Firewall rule for UDP 8766/8767.
-- For USB, confirm the iPad is paired and `iproxy.exe` is the selected path.
+- In the GUI, choose **Repair private UDP rule** once (Windows requests administrator approval).
+- For USB, confirm the iPad appears in Apple Devices and is paired. The bundled
+  `tools\usbmuxd\idevice_id.exe -l` must print its UDID; `iproxy.exe` is selected automatically.
 - Include the GUI/backend log, GPU, FFmpeg build and OTD version in bug reports.

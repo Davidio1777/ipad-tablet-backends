@@ -7,6 +7,7 @@ namespace IPadTablet.Backend;
 internal interface IPenSink : IAsyncDisposable
 {
     long EventsReceived { get; }
+    bool Connected { get; }
     Task StartAsync(CancellationToken cancellationToken);
     ValueTask ApplyAsync(JsonElement message, CancellationToken cancellationToken = default);
     ValueTask ReleaseAsync(CancellationToken cancellationToken = default);
@@ -15,6 +16,7 @@ internal interface IPenSink : IAsyncDisposable
 internal sealed class NullPenSink : IPenSink
 {
     public long EventsReceived => 0;
+    public bool Connected => false;
     public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     public ValueTask ApplyAsync(JsonElement message, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     public ValueTask ReleaseAsync(CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
@@ -23,25 +25,34 @@ internal sealed class NullPenSink : IPenSink
 
 internal sealed class OtdPipePenSink : IPenSink
 {
+    private readonly string pipeName;
     private readonly SemaphoreSlim writeLock = new(1, 1);
     private readonly object connectionLock = new();
     private NamedPipeServerStream? connection;
     private TaskCompletionSource disconnected = NewSignal();
     private long eventsReceived;
-    private long lastSequence = -1;
     private ushort x, y, pressure;
     private sbyte tiltX, tiltY;
     private byte buttons;
 
     public long EventsReceived => Interlocked.Read(ref eventsReceived);
+    public bool Connected
+    {
+        get
+        {
+            lock (connectionLock) return connection is { IsConnected: true };
+        }
+    }
+
+    public OtdPipePenSink(string pipeName = "ipad-pencil") => this.pipeName = pipeName;
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            await using var pipe = new NamedPipeServerStream("ipad-pencil", PipeDirection.Out, 1,
+            await using var pipe = new NamedPipeServerStream(pipeName, PipeDirection.Out, 1,
                 PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.WriteThrough);
-            Console.WriteLine("OTD: warte auf \\.\\pipe\\ipad-pencil");
+            Console.WriteLine($"OTD: warte auf \\.\\pipe\\{pipeName}");
             await pipe.WaitForConnectionAsync(cancellationToken);
             lock (connectionLock)
             {
@@ -59,11 +70,6 @@ internal sealed class OtdPipePenSink : IPenSink
     {
         if (!message.TryGetProperty("type", out var typeElement)) return;
         var type = typeElement.GetString();
-        var sequence = message.TryGetProperty("sequence", out var sequenceElement)
-            ? sequenceElement.GetInt64() : lastSequence + 1;
-        if (sequence <= lastSequence) return;
-        lastSequence = sequence;
-
         if (type == "button")
         {
             var button = Math.Clamp(GetInt(message, "button", 1), 1, 3);

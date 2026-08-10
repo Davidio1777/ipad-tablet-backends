@@ -59,6 +59,7 @@ public static class WindowsExecutableLocator
             yield return Path.Combine(baseDirectory, name);
             yield return Path.Combine(packageRoot, name);
             yield return Path.Combine(packageRoot, "tools", name);
+            yield return Path.Combine(packageRoot, "tools", "usbmuxd", name);
             yield return Path.Combine(packageRoot, "tools", "ffmpeg", name);
             yield return Path.Combine(packageRoot, "tools", "ffmpeg", "bin", name);
             yield return Path.Combine(packageRoot, "ffmpeg", "bin", name);

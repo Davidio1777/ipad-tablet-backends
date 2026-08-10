@@ -15,6 +15,8 @@ internal sealed class BackendState : IAsyncDisposable
     private UdpBridge? udp;
     private UsbBridge? usb;
     private Task? penTask;
+    private Task? healthTask;
+    private Task? otdTask;
     private long frames;
     private long inputSamples;
     private int streamRevision;
@@ -24,6 +26,7 @@ internal sealed class BackendState : IAsyncDisposable
     public long Frames => Interlocked.Read(ref frames);
     public long InputSamples => Interlocked.Read(ref inputSamples);
     public long InputEvents => pen.EventsReceived;
+    public bool PenConnected => pen.Connected;
 
     public BackendState(BackendOptions options)
     {
@@ -32,7 +35,7 @@ internal sealed class BackendState : IAsyncDisposable
         profile = baseProfile;
         pen = options.InputMode == "otd" ? new OtdPipePenSink() : new NullPenSink();
         capture = new CapturePipeline(options, PublishFrameAsync);
-        otd = new OtdConfigurator(options);
+        otd = new OtdConfigurator(options, () => pen.Connected);
     }
 
     public void Attach(UdpBridge? udpBridge, UsbBridge? usbBridge)
@@ -44,7 +47,8 @@ internal sealed class BackendState : IAsyncDisposable
     public async Task StartAsync()
     {
         penTask = pen.StartAsync(shutdown.Token);
-        _ = otd.EnsureAsync(cancellationToken: shutdown.Token);
+        healthTask = ReportHealthAsync(shutdown.Token);
+        otdTask = otd.MaintainAsync(shutdown.Token);
         if (VideoEnabled) await capture.StartAsync(profile, shutdown.Token);
     }
 
@@ -59,7 +63,8 @@ internal sealed class BackendState : IAsyncDisposable
         gamingMode = profile.GamingMode,
         videoEnabled = VideoEnabled,
         streamRevision,
-        encoder = capture.Encoder
+        encoder = capture.Encoder,
+        captureBackend = capture.Backend
     };
 
     public object Health => new
@@ -69,6 +74,7 @@ internal sealed class BackendState : IAsyncDisposable
         inputMode = InputMode,
         inputEvents = InputEvents,
         inputSamples = InputSamples,
+        inputConnected = PenConnected,
         udpEnabled = udp is not null,
         udpClients = udp?.ConnectedClients ?? 0,
         udpFrames = udp?.FramesSent ?? 0,
@@ -92,6 +98,8 @@ internal sealed class BackendState : IAsyncDisposable
         {
             foreach (var sample in samples.EnumerateArray().Take(512))
             {
+                if (!sample.TryGetProperty("type", out var sampleType)
+                    || sampleType.GetString() != "pencil") continue;
                 Interlocked.Increment(ref inputSamples);
                 await pen.ApplyAsync(sample, cancellationToken);
             }
@@ -107,13 +115,41 @@ internal sealed class BackendState : IAsyncDisposable
     public ValueTask ReleaseInputAsync(CancellationToken cancellationToken = default) =>
         pen.ReleaseAsync(cancellationToken);
 
+    private async Task ReportHealthAsync(CancellationToken cancellationToken)
+    {
+        var previousSamples = InputSamples;
+        var previousReports = InputEvents;
+        var previousUdp = 0L;
+        var previousUsb = 0L;
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                var samples = InputSamples;
+                var reports = InputEvents;
+                var udpPackets = udp?.InputPacketsReceived ?? 0;
+                var usbFrames = usb?.InputFramesReceived ?? 0;
+                Console.WriteLine(
+                    $"Input health: samples +{samples - previousSamples}, OTD reports +{reports - previousReports} " +
+                    $"(pipe {(PenConnected ? "connected" : "waiting")}), UDP input +{udpPackets - previousUdp} " +
+                    $"(dropped {udp?.DroppedInputPackets ?? 0}), USB input +{usbFrames - previousUsb} " +
+                    $"(dropped {usb?.DroppedInputFrames ?? 0}, {(usb?.Connected == true ? "connected" : "waiting")})");
+                previousSamples = samples;
+                previousReports = reports;
+                previousUdp = udpPackets;
+                previousUsb = usbFrames;
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+    }
+
     private async Task ApplyStreamSettingsAsync(JsonElement message, CancellationToken cancellationToken)
     {
         await settingsLock.WaitAsync(cancellationToken);
         try
         {
             var gaming = GetBool(message, "enabled");
-            if (gaming) _ = otd.EnsureAsync(true, shutdown.Token);
             var video = !message.TryGetProperty("videoEnabled", out var videoElement)
                 || videoElement.ValueKind != JsonValueKind.False;
             var next = gaming
@@ -168,6 +204,8 @@ internal sealed class BackendState : IAsyncDisposable
         await pen.ReleaseAsync();
         await pen.DisposeAsync();
         if (penTask is not null) await penTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        if (healthTask is not null) await healthTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        if (otdTask is not null) await otdTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         settingsLock.Dispose();
         shutdown.Dispose();
     }

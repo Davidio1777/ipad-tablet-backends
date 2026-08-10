@@ -1,7 +1,7 @@
 <Window x:Class="IPadTablet.Backend.Gui.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="iPad Tablet Backend 0.0.3" Width="780" Height="840" MinWidth="700" MinHeight="680"
+        Title="iPad Tablet Backend 0.0.12" Width="780" Height="860" MinWidth="700" MinHeight="680"
         WindowStartupLocation="CenterScreen">
   <Grid Margin="20">
     <Grid.RowDefinitions>
@@ -29,18 +29,24 @@
               <RowDefinition Height="Auto" />
               <RowDefinition Height="Auto" />
               <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <CheckBox x:Name="UdpEnabled" Content="Encrypted UDP" IsChecked="True" Margin="0,7" />
             <PasswordBox x:Name="TokenBox" Grid.Column="1" Margin="8,3" MinWidth="280" />
             <Button Grid.Column="2" Content="Generate token" Click="GenerateToken_Click" Padding="10,5" Margin="8,3,0,3" />
             <CheckBox x:Name="UsbEnabled" Grid.Row="1" Content="USB via iproxy" Margin="0,7" />
-            <TextBox x:Name="IproxyBox" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
+            <TextBox x:Name="IproxyBox" Grid.Row="1" Grid.Column="1"
                      Text="iproxy.exe" Margin="8,3,0,3" />
+            <Button Grid.Row="1" Grid.Column="2" Content="Browse..." Click="BrowseIproxy_Click"
+                    Padding="10,4" Margin="8,3,0,3" />
             <TextBlock Grid.Row="2" Text="UDP video/input ports" VerticalAlignment="Center" />
             <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="8,3">
               <TextBox x:Name="VideoPortBox" Text="8766" Width="80" />
               <TextBox x:Name="InputPortBox" Text="8767" Width="80" Margin="8,0,0,0" />
             </StackPanel>
+            <TextBlock Grid.Row="3" Text="Windows firewall" VerticalAlignment="Center" />
+            <Button Grid.Row="3" Grid.Column="1" Content="Repair private UDP rule"
+                    Click="RepairFirewall_Click" HorizontalAlignment="Left" Padding="12,6" Margin="8,6,0,3" />
           </Grid>
         </GroupBox>
 
