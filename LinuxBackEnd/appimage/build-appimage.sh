@@ -8,7 +8,7 @@ build_root=${BUILD_ROOT:-"$repo_root/build/appimage"}
 appdir="$build_root/AppDir"
 tools_dir="$build_root/tools"
 dist_dir=${DIST_DIR:-"$linux_root/dist"}
-version=${VERSION:-0.0.1}
+version=${VERSION:-0.0.2}
 output_name=iPad-Tablet-Linux-x86_64.AppImage
 
 for command_name in cmake ninja qmake6 python3 dotnet curl; do

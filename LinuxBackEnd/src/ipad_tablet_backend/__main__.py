@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 
@@ -82,6 +83,36 @@ def parse_pair(value: str, separator: str, label: str) -> tuple[int, int]:
         raise SystemExit(f"invalid {label}: {value}") from error
 
 
+async def run_server(server: TabletServer) -> None:
+    """Run until completion or a Unix termination signal, then clean up children."""
+    loop = asyncio.get_running_loop()
+    stop = asyncio.Event()
+    installed_signals: list[signal.Signals] = []
+    for handled_signal in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        try:
+            loop.add_signal_handler(handled_signal, stop.set)
+            installed_signals.append(handled_signal)
+        except (NotImplementedError, RuntimeError):
+            break
+
+    server_task = asyncio.create_task(server.run())
+    stop_task = asyncio.create_task(stop.wait())
+    try:
+        done, _ = await asyncio.wait(
+            (server_task, stop_task), return_when=asyncio.FIRST_COMPLETED
+        )
+        if server_task in done:
+            await server_task
+            return
+        server_task.cancel()
+        await asyncio.gather(server_task, return_exceptions=True)
+    finally:
+        stop_task.cancel()
+        await asyncio.gather(stop_task, return_exceptions=True)
+        for handled_signal in installed_signals:
+            loop.remove_signal_handler(handled_signal)
+
+
 def serve(arguments: argparse.Namespace) -> int:
     if not arguments.no_udp and len(arguments.token.encode()) < 16:
         print("Encrypted UDP requires a --token containing at least 16 UTF-8 bytes.", file=sys.stderr)
@@ -125,7 +156,7 @@ def serve(arguments: argparse.Namespace) -> int:
         ),
     )
     try:
-        asyncio.run(TabletServer(options).run())
+        asyncio.run(run_server(TabletServer(options)))
     except FileNotFoundError as error:
         print(f"cannot open input endpoint: {error}", file=sys.stderr)
         if arguments.input_mode == "otd" and not arguments.no_input:

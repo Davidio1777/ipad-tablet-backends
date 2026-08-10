@@ -1,7 +1,13 @@
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
-from ipad_tablet_backend.capture import AnnexBAccessUnitParser, CaptureOptions, build_capture_command
+from ipad_tablet_backend.capture import (
+    AnnexBAccessUnitParser,
+    CaptureOptions,
+    build_capture_command,
+    select_vaapi_device,
+)
 
 
 def nal(type_: int, payload: bytes = b"x", long: bool = True) -> bytes:
@@ -9,6 +15,10 @@ def nal(type_: int, payload: bytes = b"x", long: bool = True) -> bytes:
 
 
 class AnnexBParserTests(unittest.TestCase):
+    def test_automatic_vaapi_label_still_discovers_render_device(self) -> None:
+        with patch.object(Path, "glob", return_value=[Path("/dev/dri/renderD128")]):
+            self.assertEqual(select_vaapi_device("Automatic"), "/dev/dri/renderD128")
+
     def test_groups_access_units_across_arbitrary_chunks(self) -> None:
         first = nal(9) + nal(7) + nal(8, long=False) + nal(5)
         second = nal(9, long=False) + nal(1)
