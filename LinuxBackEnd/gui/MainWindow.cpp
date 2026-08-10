@@ -80,7 +80,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::buildUi()
 {
-    setWindowTitle(QStringLiteral("iPad Tablet Backend 0.0.2"));
+    setWindowTitle(QStringLiteral("iPad Tablet Backend 0.0.3"));
     resize(780, 760);
     setMinimumSize(680, 620);
 

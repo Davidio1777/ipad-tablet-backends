@@ -6,6 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
     <AssemblyName>ipad-tablet-backend</AssemblyName>
-    <Version>0.0.2</Version>
+    <Version>0.0.3</Version>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\Shared\WindowsExecutableLocator.cs" Link="WindowsExecutableLocator.cs" />
+  </ItemGroup>
 </Project>

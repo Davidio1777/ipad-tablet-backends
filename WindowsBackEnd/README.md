@@ -20,9 +20,8 @@ LAN transport is encrypted UDP only.
 1. Windows 11 x64
 2. [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) only when building from source;
    release executables are self-contained
-3. A full Windows FFmpeg build with `gdigrab` and at least one H.264 encoder in `PATH`
-4. [OpenTabletDriver](https://opentabletdriver.net/) 0.6.7 or a compatible newer release
-5. Optional USB: a Windows `iproxy.exe`/libusbmuxd build and Apple Mobile Device support
+3. [OpenTabletDriver](https://opentabletdriver.net/) 0.6.7 or a compatible newer release
+4. Optional USB: a Windows `iproxy.exe`/libusbmuxd build and Apple Mobile Device support
 
 ## Install the release package
 
@@ -33,7 +32,12 @@ SHA-256 hash, and extract the complete archive. Start `gui\iPadTabletBackend.exe
 
 The GUI lets you select a monitor, enter or generate the encrypted UDP token, configure capture and
 encoding, install/repair the bundled iPad OTD integration, and start or stop the backend. The backend
-and GUI do not need a separately installed .NET runtime.
+and GUI do not need a separately installed .NET runtime. FFmpeg is bundled in `tools`, so it remains
+available after a reboot without changing the system `PATH`.
+
+The launcher automatically searches the release package, `PATH`, common WinGet/Scoop locations and
+the current user's folders for FFmpeg and `OpenTabletDriver.Console.exe`. If a portable OTD copy is
+stored elsewhere, the launcher opens a file picker instead of repeatedly trying a missing executable.
 
 ## Build
 
@@ -43,6 +47,10 @@ Open PowerShell in `WindowsBackEnd`:
 Set-ExecutionPolicy -Scope Process Bypass
 .\build.ps1
 ```
+
+The build script downloads the current BtbN static GPL FFmpeg build and includes its license and
+build information in `dist\tools`. Set `IPAD_TABLET_SKIP_FFMPEG=1` only when producing a developer
+build that intentionally uses an external FFmpeg installation.
 
 Outputs:
 
