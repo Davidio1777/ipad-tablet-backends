@@ -1,3 +1,5 @@
+using IPadTablet.Shared;
+
 namespace IPadTablet.Backend;
 
 internal sealed record CaptureProfile(
@@ -90,6 +92,13 @@ internal sealed class BackendOptions
             throw new ArgumentException("--rate-control must be cbr or vbr.");
         options.BaseProfile = new(width & ~1, height & ~1, Math.Clamp(fps, 30, 120),
             Math.Clamp(bitrate, 1_000_000, 50_000_000), rateControl, false);
+        options.Ffmpeg = WindowsExecutableLocator.Find(options.Ffmpeg, WindowsTool.Ffmpeg)
+            ?? options.Ffmpeg;
+        options.OtdCli = WindowsExecutableLocator.Find(
+            options.OtdCli, WindowsTool.OpenTabletDriverConsole) ?? options.OtdCli;
+        if (options.Usb)
+            options.Iproxy = WindowsExecutableLocator.Find(options.Iproxy, WindowsTool.Iproxy)
+                ?? options.Iproxy;
         return options;
     }
 

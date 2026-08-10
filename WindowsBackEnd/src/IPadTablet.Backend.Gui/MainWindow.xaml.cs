@@ -3,7 +3,9 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Windows;
 using System.Windows.Controls;
+using IPadTablet.Shared;
 using MessageBox = System.Windows.MessageBox;
+using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 using Screen = System.Windows.Forms.Screen;
 
 namespace IPadTablet.Backend.Gui;
@@ -21,6 +23,10 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         TokenBox.Password = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
+        FfmpegBox.Text = WindowsExecutableLocator.Find("ffmpeg.exe", WindowsTool.Ffmpeg) ?? "ffmpeg.exe";
+        OtdCliBox.Text = WindowsExecutableLocator.Find(
+            "OpenTabletDriver.Console.exe", WindowsTool.OpenTabletDriverConsole)
+            ?? "OpenTabletDriver.Console.exe";
         RefreshScreens();
         Closing += (_, _) => StopBackend();
     }
@@ -82,6 +88,12 @@ public partial class MainWindow : Window
         try
         {
             var executable = FindBackend();
+            FfmpegBox.Text = RequireExecutable(
+                FfmpegBox.Text, WindowsTool.Ffmpeg, "Select ffmpeg.exe", "ffmpeg.exe|ffmpeg.exe");
+            if (OtdEnabled.IsChecked == true)
+                OtdCliBox.Text = RequireExecutable(OtdCliBox.Text,
+                    WindowsTool.OpenTabletDriverConsole, "Select OpenTabletDriver.Console.exe",
+                    "OpenTabletDriver console|OpenTabletDriver.Console.exe;otd.exe");
             var info = new ProcessStartInfo(executable)
             {
                 UseShellExecute = false,
@@ -110,6 +122,7 @@ public partial class MainWindow : Window
     private void AddArguments(ProcessStartInfo info)
     {
         info.ArgumentList.Add("serve");
+        Add(info, "--ffmpeg", FfmpegBox.Text);
         Add(info, "--encoder", Selected(EncoderBox));
         Add(info, "--source-x", SourceXBox.Text);
         Add(info, "--source-y", SourceYBox.Text);
@@ -179,6 +192,31 @@ public partial class MainWindow : Window
             File.Exists(Path.Combine(path, "IPadPencilWindowsHub.dll")) &&
             File.Exists(Path.Combine(path, "Apple-iPad-Pro-Windows.json")))
             ?? throw new DirectoryNotFoundException("The bundled OTD integration folder was not found. Keep gui, backend and otd together.");
+    }
+
+    private void BrowseFfmpeg_Click(object sender, RoutedEventArgs e) =>
+        FfmpegBox.Text = BrowseExecutable("Select ffmpeg.exe", "ffmpeg.exe|ffmpeg.exe") ?? FfmpegBox.Text;
+
+    private void BrowseOtd_Click(object sender, RoutedEventArgs e) =>
+        OtdCliBox.Text = BrowseExecutable("Select OpenTabletDriver.Console.exe",
+            "OpenTabletDriver console|OpenTabletDriver.Console.exe;otd.exe") ?? OtdCliBox.Text;
+
+    private string RequireExecutable(string configured, WindowsTool tool, string title, string filter)
+    {
+        var detected = WindowsExecutableLocator.Find(configured, tool);
+        if (detected is not null)
+        {
+            AppendLog($"Detected {tool}: {detected}");
+            return detected;
+        }
+        return BrowseExecutable(title, filter)
+            ?? throw new FileNotFoundException($"{title.Replace("Select ", "")} was not found. Select its location to continue.");
+    }
+
+    private string? BrowseExecutable(string title, string filter)
+    {
+        var dialog = new OpenFileDialog { Title = title, Filter = filter, CheckFileExists = true };
+        return dialog.ShowDialog(this) == true ? dialog.FileName : null;
     }
 
     private void Stop_Click(object sender, RoutedEventArgs e) => StopBackend();
