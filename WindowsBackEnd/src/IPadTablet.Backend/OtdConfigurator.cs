@@ -184,7 +184,7 @@ internal sealed class OtdConfigurator
         File.Copy(Path.Combine(source, "Apple-iPad-Pro-Windows.json"),
             Path.Combine(configurations, "Apple-iPad-Pro-Windows.json"), true);
 
-        // v0.0.4 placed the assembly directly in Plugins, which OTD explicitly ignores.
+        // Older preview builds placed the assembly directly in Plugins, which OTD explicitly ignores.
         var legacy = Path.Combine(pluginRoot, "IPadPencilWindowsHub.dll");
         if (File.Exists(legacy)) File.Delete(legacy);
         Console.WriteLine($"OTD integration installed in {data}");

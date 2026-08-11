@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ipad-tablet-backend"
-version = "0.0.3"
+version = "0.0.4"
 description = "Low-latency Linux screen streaming and virtual Apple Pencil tablet backend"
 requires-python = ">=3.11"
 license = { text = "MIT" }

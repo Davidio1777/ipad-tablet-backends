@@ -187,12 +187,14 @@ public partial class MainWindow : Window
     {
         var candidates = new[]
         {
+            Path.Combine(AppContext.BaseDirectory, "rayshine-backend.exe"),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "backend", "rayshine-backend.exe")),
             Path.Combine(AppContext.BaseDirectory, "ipad-tablet-backend.exe"),
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "backend", "ipad-tablet-backend.exe")),
             Path.Combine(AppContext.BaseDirectory, "IPadTablet.Backend.exe")
         };
         return candidates.FirstOrDefault(File.Exists)
-            ?? throw new FileNotFoundException("ipad-tablet-backend.exe was not found. Keep the gui and backend folders together.");
+            ?? throw new FileNotFoundException("rayshine-backend.exe was not found. Keep the gui and backend folders together.");
     }
 
     private static string FindOtdDirectory()
@@ -226,7 +228,7 @@ public partial class MainWindow : Window
                 || !int.TryParse(InputPortBox.Text, out var inputPort) || inputPort is < 1 or > 65535)
                 throw new InvalidOperationException("UDP ports must be numbers between 1 and 65535.");
 
-            const string ruleName = "iPad Tablet Backend UDP (Private)";
+            const string ruleName = "RayShine Backend UDP (Private)";
             var backend = FindBackend().Replace("'", "''");
             var script = $"$ErrorActionPreference='Stop'; " +
                 $"Get-NetFirewallRule -DisplayName '{ruleName}' -ErrorAction SilentlyContinue | Remove-NetFirewallRule; " +

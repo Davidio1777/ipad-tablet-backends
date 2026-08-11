@@ -22,20 +22,20 @@ jobs:
       - name: Test Windows UDP and USB protocols
         shell: pwsh
         run: |
-          $env:IPAD_TABLET_BACKEND_EXE = "$PWD\WindowsBackEnd\dist\backend\ipad-tablet-backend.exe"
+          $env:IPAD_TABLET_BACKEND_EXE = "$PWD\WindowsBackEnd\dist\backend\rayshine-backend.exe"
           dotnet run --project WindowsBackEnd/tests/IPadTablet.Backend.Tests/IPadTablet.Backend.Tests.csproj -c Release
       - name: Package Windows distribution
         shell: pwsh
         run: |
-          Compress-Archive -Path WindowsBackEnd/dist/* -DestinationPath iPad-Tablet-Windows-x64.zip
-          $hash = (Get-FileHash iPad-Tablet-Windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  iPad-Tablet-Windows-x64.zip" | Set-Content iPad-Tablet-Windows-x64.zip.sha256
+          Compress-Archive -Path WindowsBackEnd/dist/* -DestinationPath RayShine-Windows-x64.zip
+          $hash = (Get-FileHash RayShine-Windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  RayShine-Windows-x64.zip" | Set-Content RayShine-Windows-x64.zip.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: iPad-Tablet-Windows-x64
+          name: RayShine-Windows-x64
           path: |
-            iPad-Tablet-Windows-x64.zip
-            iPad-Tablet-Windows-x64.zip.sha256
+            RayShine-Windows-x64.zip
+            RayShine-Windows-x64.zip.sha256
 
   linux:
     runs-on: ubuntu-22.04
@@ -59,7 +59,7 @@ jobs:
         working-directory: LinuxBackEnd
       - uses: actions/upload-artifact@v4
         with:
-          name: iPad-Tablet-Linux
+          name: RayShine-Linux
           path: LinuxBackEnd/dist/*
 
   release:
@@ -69,7 +69,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: iPad-Tablet-*
+          pattern: RayShine-*
           path: release-assets
           merge-multiple: true
       - uses: softprops/action-gh-release@v2

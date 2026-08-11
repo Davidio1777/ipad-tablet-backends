@@ -1,5 +1,5 @@
 [Unit]
-Description=iPad Linux Tablet streaming and Pencil backend
+Description=RayShine streaming and Pencil backend
 After=graphical-session.target
 PartOf=graphical-session.target
 

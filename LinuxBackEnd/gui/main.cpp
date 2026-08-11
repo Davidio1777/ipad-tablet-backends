@@ -6,8 +6,8 @@
 int main(int argc, char *argv[])
 {
     QApplication application(argc, argv);
-    QCoreApplication::setApplicationName("iPad Tablet Backend");
-    QCoreApplication::setApplicationVersion("0.0.3");
+    QCoreApplication::setApplicationName("RayShine Backend");
+    QCoreApplication::setApplicationVersion("0.0.4");
     QCoreApplication::setOrganizationName("Davidio1777");
     QCoreApplication::setOrganizationDomain("dev.david");
 

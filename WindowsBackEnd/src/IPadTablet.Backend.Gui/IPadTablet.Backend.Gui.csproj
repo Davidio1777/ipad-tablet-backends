@@ -7,8 +7,9 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>iPadTabletBackend</AssemblyName>
-    <Version>0.0.3</Version>
+    <AssemblyName>RayShineBackend</AssemblyName>
+    <ApplicationIcon>..\..\assets\RayShine.ico</ApplicationIcon>
+    <Version>0.0.4</Version>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\Shared\WindowsExecutableLocator.cs" Link="WindowsExecutableLocator.cs" />

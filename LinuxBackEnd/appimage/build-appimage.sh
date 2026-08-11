@@ -8,8 +8,8 @@ build_root=${BUILD_ROOT:-"$repo_root/build/appimage"}
 appdir="$build_root/AppDir"
 tools_dir="$build_root/tools"
 dist_dir=${DIST_DIR:-"$linux_root/dist"}
-version=${VERSION:-0.0.3}
-output_name=iPad-Tablet-Linux-x86_64.AppImage
+version=${VERSION:-0.0.4}
+output_name=RayShine-Linux-x86_64.AppImage
 
 for command_name in cmake ninja qmake6 python3 dotnet curl; do
   command -v "$command_name" >/dev/null || { echo "Missing build command: $command_name" >&2; exit 2; }
@@ -17,7 +17,7 @@ done
 
 rm -rf "$build_root/AppDir" "$build_root/gui" "$build_root/pyinstaller"
 mkdir -p "$appdir/usr/bin" "$appdir/usr/share/applications" \
-  "$appdir/usr/share/icons/hicolor/scalable/apps" "$appdir/usr/share/ipad-tablet/backend" \
+  "$appdir/usr/share/icons/hicolor/1024x1024/apps" "$appdir/usr/share/ipad-tablet/backend" \
   "$appdir/usr/share/ipad-tablet/install" "$appdir/usr/share/ipad-tablet/otd" \
   "$tools_dir" "$dist_dir"
 
@@ -44,8 +44,8 @@ install -m0644 "$linux_root/opentabletdriver/Configurations/Apple-iPad-Pro.json"
   "$appdir/usr/share/ipad-tablet/otd/"
 install -m0644 "$appimage_root/dev.david.ipad-tablet-backend.desktop" \
   "$appdir/usr/share/applications/"
-install -m0644 "$appimage_root/dev.david.ipad-tablet-backend.svg" \
-  "$appdir/usr/share/icons/hicolor/scalable/apps/"
+install -m0644 "$repo_root/branding/rayshine-icon.png" \
+  "$appdir/usr/share/icons/hicolor/1024x1024/apps/dev.david.ipad-tablet-backend.png"
 
 linuxdeploy="$tools_dir/linuxdeploy-x86_64.AppImage"
 qt_plugin="$tools_dir/linuxdeploy-plugin-qt-x86_64.AppImage"
@@ -74,7 +74,7 @@ export OUTPUT="$dist_dir/$output_name"
 "$linuxdeploy" --appdir "$appdir" \
   --executable "$appdir/usr/bin/ipad-tablet-backend-gui" \
   --desktop-file "$appdir/usr/share/applications/dev.david.ipad-tablet-backend.desktop" \
-  --icon-file "$appdir/usr/share/icons/hicolor/scalable/apps/dev.david.ipad-tablet-backend.svg" \
+  --icon-file "$appdir/usr/share/icons/hicolor/1024x1024/apps/dev.david.ipad-tablet-backend.png" \
   --custom-apprun "$appimage_root/AppRun" --plugin qt --output appimage
 
 (cd "$dist_dir" && sha256sum "$output_name" > "$output_name.sha256")

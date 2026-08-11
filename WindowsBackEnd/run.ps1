@@ -8,7 +8,7 @@ param(
 )
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Backend = "$Root\dist\backend\ipad-tablet-backend.exe"
+$Backend = "$Root\dist\backend\rayshine-backend.exe"
 if (!(Test-Path $Backend)) { throw "Run .\build.ps1 first." }
 if (!$UsbOnly -and ([string]::IsNullOrWhiteSpace($Token) -or [Text.Encoding]::UTF8.GetByteCount($Token) -lt 16)) {
   throw "Encrypted UDP requires -Token with at least 16 UTF-8 bytes or IPAD_TABLET_TOKEN."

@@ -1,4 +1,4 @@
-# iPad Tablet Windows 11 Backend
+# RayShine Windows 11 Backend
 
 The Windows backend streams the desktop to the iPad and exposes Apple Pencil through an
 OpenTabletDriver device hub. It offers both a console executable and a WPF GUI.
@@ -28,9 +28,9 @@ LAN transport is encrypted UDP only.
 
 ## Install the release package
 
-Download `iPad-Tablet-Windows-x64.zip` and its checksum from the
+Download `RayShine-Windows-x64.zip` and its checksum from the
 [latest GitHub release](https://github.com/Davidio1777/ipad-tablet-backends/releases/latest), verify the
-SHA-256 hash, and extract the complete archive. Start `gui\iPadTabletBackend.exe`; keep the `gui`,
+SHA-256 hash, and extract the complete archive. Start `gui\RayShineBackend.exe`; keep the `gui`,
 `backend` and `otd` folders together.
 
 The GUI lets you select a monitor, enter or generate the encrypted UDP token, configure capture and
@@ -58,8 +58,8 @@ intentionally use external tools.
 
 Outputs:
 
-- `dist\backend\ipad-tablet-backend.exe`: console backend
-- `dist\gui\iPadTabletBackend.exe`: graphical launcher
+- `dist\backend\rayshine-backend.exe`: console backend
+- `dist\gui\RayShineBackend.exe`: graphical launcher
 - `dist\otd`: OTD plugin and tablet configuration
 
 Keep the `gui` and `backend` folders next to each other. The GUI locates the console executable in
@@ -81,7 +81,7 @@ as `OTD ready`; a CLI exit code alone is not treated as success.
 
 ## Run with the GUI
 
-Start `dist\gui\iPadTabletBackend.exe`, generate a token, select the monitor or adjust its capture
+Start `dist\gui\RayShineBackend.exe`, generate a token, select the monitor or adjust its capture
 rectangle and encoder, then choose **Start backend**. For LAN use, permit UDP 8766 and 8767 in Windows
 Defender Firewall for private networks only.
 
@@ -109,7 +109,7 @@ USB plus encrypted UDP:
 The low-level executable supports additional settings:
 
 ```powershell
-dist\backend\ipad-tablet-backend.exe serve `
+dist\backend\rayshine-backend.exe serve `
   --token "replace-this-with-a-long-random-token" `
   --encoder h264_nvenc `
   --source-x 2560 --source-y 0 --source-width 2560 --source-height 1440 `

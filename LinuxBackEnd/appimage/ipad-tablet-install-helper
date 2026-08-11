@@ -37,12 +37,12 @@ cat > "$temporary_dir/dev.david.ipad-tablet.install.policy" <<'POLICY'
 <!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
   "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
 <policyconfig>
-  <vendor>iPad Tablet Backend</vendor>
+  <vendor>RayShine</vendor>
   <vendor_url>https://github.com/Davidio1777/ipad-tablet-backends</vendor_url>
   <action id="dev.david.ipad-tablet.install">
-    <description>Install iPad Tablet system integration</description>
+    <description>Install RayShine system integration</description>
     <description xml:lang="de">iPad-Tablet-Systemintegration installieren</description>
-    <message>Authentication is required to install iPad Tablet udev permissions</message>
+    <message>Authentication is required to install RayShine udev permissions</message>
     <message xml:lang="de">Zum Installieren der iPad-Tablet-udev-Rechte ist eine Anmeldung erforderlich</message>
     <defaults>
       <allow_any>no</allow_any>
