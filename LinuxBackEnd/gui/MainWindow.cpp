@@ -80,13 +80,13 @@ MainWindow::~MainWindow()
 
 void MainWindow::buildUi()
 {
-    setWindowTitle(QStringLiteral("iPad Tablet Backend 0.0.3"));
+    setWindowTitle(QStringLiteral("RayShine Backend 0.0.4"));
     resize(780, 760);
     setMinimumSize(680, 620);
 
     auto *central = new QWidget(this);
     auto *root = new QVBoxLayout(central);
-    auto *title = new QLabel(QStringLiteral("iPad Tablet Backend"));
+    auto *title = new QLabel(QStringLiteral("RayShine Backend"));
     auto font = title->font();
     font.setPointSize(20);
     font.setBold(true);

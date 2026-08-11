@@ -1,4 +1,4 @@
-# iPad Tablet Linux Backend
+# RayShine Linux Backend
 
 This service streams a Linux display to the iPad as low-latency H.264 and turns Apple Pencil samples
 into an absolute OpenTabletDriver device. Pencil input and video have independent queues, so a lost or
@@ -58,13 +58,13 @@ approved for your system.
 
 ## Install the Qt 6 AppImage
 
-Download `iPad-Tablet-Linux-x86_64.AppImage` and its checksum from the
+Download `RayShine-Linux-x86_64.AppImage` and its checksum from the
 [latest GitHub release](https://github.com/Davidio1777/ipad-tablet-backends/releases/latest), then:
 
 ```bash
-sha256sum -c iPad-Tablet-Linux-x86_64.AppImage.sha256
-chmod +x iPad-Tablet-Linux-x86_64.AppImage
-./iPad-Tablet-Linux-x86_64.AppImage
+sha256sum -c RayShine-Linux-x86_64.AppImage.sha256
+chmod +x RayShine-Linux-x86_64.AppImage
+./RayShine-Linux-x86_64.AppImage
 ```
 
 In the GUI, select **Install / Repair** once. It installs the bundled backend into `~/.local/bin`,

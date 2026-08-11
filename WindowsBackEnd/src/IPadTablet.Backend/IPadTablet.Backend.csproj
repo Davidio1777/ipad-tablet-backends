@@ -5,8 +5,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <AssemblyName>ipad-tablet-backend</AssemblyName>
-    <Version>0.0.3</Version>
+    <AssemblyName>rayshine-backend</AssemblyName>
+    <ApplicationIcon>..\..\assets\RayShine.ico</ApplicationIcon>
+    <Version>0.0.4</Version>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\Shared\WindowsExecutableLocator.cs" Link="WindowsExecutableLocator.cs" />

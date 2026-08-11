@@ -1,7 +1,7 @@
 <Window x:Class="IPadTablet.Backend.Gui.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="iPad Tablet Backend 0.0.12" Width="780" Height="860" MinWidth="700" MinHeight="680"
+        Title="RayShine Backend 0.0.4" Width="780" Height="860" MinWidth="700" MinHeight="680"
         WindowStartupLocation="CenterScreen">
   <Grid Margin="20">
     <Grid.RowDefinitions>
@@ -11,7 +11,7 @@
     </Grid.RowDefinitions>
 
     <StackPanel Margin="0,0,0,16">
-      <TextBlock Text="iPad Tablet Backend" FontSize="28" FontWeight="SemiBold" />
+      <TextBlock Text="RayShine Backend" FontSize="28" FontWeight="SemiBold" />
       <TextBlock Text="Encrypted UDP, optional USB, and automatic OpenTabletDriver setup"
                  Foreground="Gray" Margin="0,4,0,0" />
     </StackPanel>

@@ -119,8 +119,8 @@ internal sealed class BackendOptions
     }
 
     private static void PrintHelp() => Console.WriteLine("""
-        Windows 11 iPad Tablet Backend
-        ipad-tablet-backend serve [options]
+        RayShine Windows 11 Backend
+        rayshine-backend serve [options]
 
           --host 0.0.0.0 --token LONG_RANDOM_TOKEN
           --encoder auto|h264_amf|h264_nvenc|h264_qsv|libx264

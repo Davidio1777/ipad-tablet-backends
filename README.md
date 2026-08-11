@@ -1,7 +1,7 @@
-# iPad Tablet Backends
+# RayShine Backends
 
-Linux and Windows 11 backends for using an iPad Pro and Apple Pencil as a low-latency display and an
-OpenTabletDriver-compatible pen tablet. The iPad client is developed in a separate private repository
+RayShine provides Linux and Windows 11 backends for using an iPad Pro and Apple Pencil as a
+low-latency display and an OpenTabletDriver-compatible pen tablet. The iPad client is developed in a separate private repository
 and is not included here.
 
 ## Choose a backend
@@ -19,8 +19,8 @@ bitrate, CBR/VBR and a video-off tablet-only mode. LAN transport is encrypted UD
 Versioned, ready-to-run packages are published on the
 [GitHub Releases page](https://github.com/Davidio1777/ipad-tablet-backends/releases):
 
-- Linux x86_64 Qt 6 AppImage, containing the GUI, backend and iPad OTD integration
-- Windows 11 x64 ZIP, containing the self-contained GUI/backend executables and iPad OTD integration
+- `RayShine-Linux-x86_64.AppImage`, containing the Qt 6 GUI, backend and iPad OTD integration
+- `RayShine-Windows-x64.zip`, containing the self-contained GUI/backend executables and iPad OTD integration
 
 Both downloads include a SHA-256 checksum file. The Windows package bundles FFmpeg and a pinned,
 checksum-verified x64 `iproxy` runtime. OpenTabletDriver and Apple's current Apple Devices app remain

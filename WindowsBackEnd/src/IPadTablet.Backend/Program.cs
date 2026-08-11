@@ -18,7 +18,7 @@ udp?.Start();
 usb?.Start();
 await state.StartAsync();
 
-Console.WriteLine("iPad Tablet Windows backend is running.");
+Console.WriteLine("RayShine Windows backend is running.");
 Console.WriteLine($"Input: {options.InputMode}; encrypted UDP: {!options.NoUdp}; USB: {options.Usb}");
 Console.WriteLine("Press Ctrl+C to stop.");
 

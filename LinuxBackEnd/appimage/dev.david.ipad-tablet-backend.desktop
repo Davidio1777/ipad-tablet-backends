@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=iPad Tablet Backend
+Name=RayShine Backend
 Comment=Use an iPad and Apple Pencil as a display and OpenTabletDriver tablet
 Exec=ipad-tablet-backend-gui
 Icon=dev.david.ipad-tablet-backend
